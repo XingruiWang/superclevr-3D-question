@@ -11,6 +11,7 @@ import time
 import re
 import pdb
 from pprint import pprint
+random.seed(120)
 
 import question_engine as qeng
 
@@ -80,6 +81,8 @@ parser.add_argument('--instances_per_template', default=1, type=int,
         help="The number of times each template should be instantiated on an image")
 
 # Misc
+parser.add_argument("--remove_redundant", action="store_true", 
+        help="Filter out redundant filters in the question generation prodecure")
 parser.add_argument('--reset_counts_every', default=250, type=int,
         help="How often to reset template and answer counts. Higher values will " +
                  "result in flatter distributions over templates and answers, but " +
@@ -93,7 +96,7 @@ parser.add_argument('--profile', action='store_true',
 # args = parser.parse_args()
 
 
-def precompute_filter_options(scene_struct, metadata):
+def precompute_filter_options(scene_struct, metadata, remove_redundant=False):
     # Keys are tuples (size, color, shape, material) (where some may be None)
     # and values are lists of object idxs that match the filter criterion
     attribute_map = {}
@@ -141,6 +144,11 @@ def precompute_filter_options(scene_struct, metadata):
                         attribute_map[masked_key] = set()
                     attribute_map[masked_key].add(object_idx)
 
+
+
+    if remove_redundant:
+        attribute_map = drop_redundant_filters(attribute_map)
+
     scene_struct['_filter_options'] = attribute_map
 
 
@@ -161,8 +169,7 @@ def complete_parts(scene_struct, metadata):
                     part[k] = obj['parts'][part_name][k]
                 obj['_parts'][part_idx] = part
 
-
-def precompute_partfilter_options(scene_struct, metadata, obj_idx):
+def precompute_partfilter_options(scene_struct, metadata, obj_idx, remove_redundant=False):
     '''
     for each object (given obj_idx) in scene_struct['objects'], 
     add a ['_partfilter_options'] field that stores the part filtering info. 
@@ -217,10 +224,45 @@ def precompute_partfilter_options(scene_struct, metadata, obj_idx):
                 
 
     attribute_map.pop((None, None, None, None)) # does not allow empty filter for parts
+    if remove_redundant:
+        attribute_map = drop_redundant_filters(attribute_map)
+
     scene_struct['objects'][obj_idx]['_partfilter_options'] = attribute_map
     
+def subsumes(k1, k2):
+    """
+    Let k1 subsume k2 if 2 conditions are met:
+    1. for all indices in k2 that are not None, k1 is equal to k2
+    2. for some index in k2 that is None, k1 is not None
+    i.e. k1 is more restrictive than k2 
+    """
+    assert(len(k1) == len(k2))
+    any_different = False
+    # go up to the last element, which is the object type 
+    for i in range(len(k2)):
+        # condition 1 
+        if k2[i] is not None and k1[i] != k2[i]:
+            return False
+        # condition 2 
+        if k2[i] is None and k1[i] is not None:
+            any_different = True
+    return any_different 
+
+def drop_redundant_filters(attribute_map):            
+    to_drop = []
+    for k1, denot1 in attribute_map.items():
+        for k2, denot2 in attribute_map.items(): 
+            if k1 == k2:
+                continue
+            if subsumes(k1, k2):
+                # sanity check 
+                assert(len(denot1) <= len(denot2)) 
+                if len(denot1) == len(denot2):
+                    to_drop.append(k1)
+    new_attribute_map = {k:v for k, v in attribute_map.items() if k not in to_drop}
+    return new_attribute_map
     
-def find_partfilter_options(objectpart_idxs, scene_struct, metadata):
+def find_partfilter_options(objectpart_idxs, scene_struct, metadata, remove_redundant=False):
     # objectpart_idxs: dicts{obj_id: [part_ids]}
     # Keys are tuples (size, color, Partname, material) (where some may be None)
     # and values are dicts{obj_id: [part_ids]} that match the filter criterion
@@ -236,7 +278,7 @@ def find_partfilter_options(objectpart_idxs, scene_struct, metadata):
     attribute_map = {}
     for obj_idx in part_idxs:
         if '_partfilter_options' not in scene_struct['objects'][obj_idx]:
-            precompute_partfilter_options(scene_struct, metadata, obj_idx)
+            precompute_partfilter_options(scene_struct, metadata, obj_idx, remove_redundant=remove_redundant)
 
         part_idx_list = set(part_idxs[obj_idx])
         for k, vs in scene_struct['objects'][obj_idx]['_partfilter_options'].items():
@@ -248,12 +290,12 @@ def find_partfilter_options(objectpart_idxs, scene_struct, metadata):
             attribute_map[k][obj_idx].update(res)
     return attribute_map
 
-def find_filter_options(object_idxs, scene_struct, metadata):
+def find_filter_options(object_idxs, scene_struct, metadata, remove_redundant=False):
     # Keys are tuples (size, color, shape, material) (where some may be None)
     # and values are lists of object idxs that match the filter criterion
 
     if '_filter_options' not in scene_struct:
-        precompute_filter_options(scene_struct, metadata)
+        precompute_filter_options(scene_struct, metadata, remove_redundant=remove_redundant)
 
     attribute_map = {}
     object_idxs = set(object_idxs)
@@ -283,10 +325,10 @@ def add_empty_filter_options(attribute_map, metadata, num_to_add):
 
 
 def find_relate_filter_options(object_idx, scene_struct, metadata,
-        unique=False, include_zero=False, trivial_frac=0.1):
+        unique=False, include_zero=False, trivial_frac=0.1, remove_redundant=False):
     options = {}
     if '_filter_options' not in scene_struct:
-        precompute_filter_options(scene_struct, metadata)
+        precompute_filter_options(scene_struct, metadata, remove_redundant=remove_redundant)
 
     # TODO: Right now this is only looking for nontrivial combinations; in some
     # cases I may want to add trivial combinations, either where the intersection
@@ -359,8 +401,14 @@ def other_heuristic(text, param_vals):
     return text
 
 
-def instantiate_templates_dfs(scene_struct, template, metadata, answer_counts,
-                                                            synonyms, max_instances=None, verbose=False):
+def instantiate_templates_dfs(scene_struct, 
+                              template, 
+                              metadata, 
+                              answer_counts,
+                              synonyms, 
+                              max_instances=None, 
+                              remove_redundant=False,
+                              verbose=False):
 
     param_name_to_type = {p['name']: p['type'] for p in template['params']} 
 
@@ -380,7 +428,7 @@ def instantiate_templates_dfs(scene_struct, template, metadata, answer_counts,
         q = {'nodes': state['nodes']}
         outputs = qeng.answer_question(q, metadata, scene_struct, all_outputs=True)
         answer = outputs[-1] #len(outputs) is equal to len(state['nodes'], outputs contain answers after each node)
-        
+
         if answer == '__INVALID__': continue
 
         # Check to make sure constraints are satisfied for the current state
@@ -488,14 +536,17 @@ def instantiate_templates_dfs(scene_struct, template, metadata, answer_counts,
                 include_zero = (next_node['type'] == 'relate_filter_count'
                                                 or next_node['type'] == 'relate_filter_exist')
                 filter_options = find_relate_filter_options(answer, scene_struct, metadata,
-                                                        unique=unique, include_zero=include_zero)
+                                                        unique=unique, include_zero=include_zero,
+                                                        remove_redundant=remove_redundant)
             else:
                 if next_node['type'].startswith('part'):
                     part_flag = 'part'
-                    filter_options = find_partfilter_options(answer, scene_struct, metadata)       
+                    filter_options = find_partfilter_options(answer, scene_struct, metadata, 
+                                                             remove_redundant=remove_redundant)       
                     unified_node_type = next_node['type'][4:]
                 else:
-                    filter_options = find_filter_options(answer, scene_struct, metadata)       
+                    filter_options = find_filter_options(answer, scene_struct, metadata, 
+                                                         remove_redundant=remove_redundant)       
                     unified_node_type = next_node['type']
             
                 if unified_node_type == 'filter':
@@ -631,6 +682,7 @@ def instantiate_templates_dfs(scene_struct, template, metadata, answer_counts,
                 'next_template_node': state['next_template_node'] + 1,
             })
             
+
     # Actually instantiate the template with the solutions we've found
     text_questions, structured_questions, answers = [], [], []
     for state in final_states:
@@ -821,6 +873,7 @@ def main(args):
                                             template_answer_counts[(fn, idx)],
                                             synonyms,
                                             max_instances=args.instances_per_template,
+                                            remove_redundant=args.remove_redundant,
                                             verbose=False)
             if args.time_dfs and args.verbose:
                 toc = time.time()

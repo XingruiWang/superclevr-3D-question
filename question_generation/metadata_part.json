@@ -55,7 +55,7 @@
       "car": ["back_left_door", "back_left_wheel", "back_right_door", "back_right_wheel", "front_left_door", "front_left_wheel", "front_right_door", "front_right_wheel", "trunk"],
       "motorbike": ["wheel_front", "wheel_back"]
     },
-    "Partname": "/home/zhuowan/zhuowan/SuperClevr/super-clevr/image_generation/data/save_models/part_dict.json"
+    "Partname": "/Users/Elias/SuperClevr/super-clevr-gen/image_generation/data/save_models_1/part_dict.json"
   },
   "functions": [
     {
