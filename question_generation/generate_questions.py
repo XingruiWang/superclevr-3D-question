@@ -11,7 +11,9 @@ import time
 import re
 import pdb
 from pprint import pprint
+import numpy as np 
 random.seed(120)
+np.random.seed(120)
 
 import question_engine as qeng
 
@@ -81,8 +83,8 @@ parser.add_argument('--instances_per_template', default=1, type=int,
         help="The number of times each template should be instantiated on an image")
 
 # Misc
-parser.add_argument("--remove_redundant", action="store_true", 
-        help="Filter out redundant filters in the question generation prodecure")
+parser.add_argument("--remove_redundant", type = float, default = 0.0, 
+        help="Filter out redundant filters in the question generation prodecure. Will filter out with probability, default is 0, no filtering.")
 parser.add_argument('--reset_counts_every', default=250, type=int,
         help="How often to reset template and answer counts. Higher values will " +
                  "result in flatter distributions over templates and answers, but " +
@@ -146,8 +148,8 @@ def precompute_filter_options(scene_struct, metadata, remove_redundant=False):
 
 
 
-    if remove_redundant:
-        attribute_map = drop_redundant_filters(attribute_map)
+    if remove_redundant > 0.0:
+        attribute_map = drop_redundant_filters(attribute_map, remove_redundant)
 
     scene_struct['_filter_options'] = attribute_map
 
@@ -169,7 +171,7 @@ def complete_parts(scene_struct, metadata):
                     part[k] = obj['parts'][part_name][k]
                 obj['_parts'][part_idx] = part
 
-def precompute_partfilter_options(scene_struct, metadata, obj_idx, remove_redundant=False):
+def precompute_partfilter_options(scene_struct, metadata, obj_idx, remove_redundant=0.0):
     '''
     for each object (given obj_idx) in scene_struct['objects'], 
     add a ['_partfilter_options'] field that stores the part filtering info. 
@@ -225,7 +227,7 @@ def precompute_partfilter_options(scene_struct, metadata, obj_idx, remove_redund
 
     attribute_map.pop((None, None, None, None)) # does not allow empty filter for parts
     if remove_redundant:
-        attribute_map = drop_redundant_filters(attribute_map)
+        attribute_map = drop_redundant_filters(attribute_map, remove_redundant)
 
     scene_struct['objects'][obj_idx]['_partfilter_options'] = attribute_map
     
@@ -248,7 +250,7 @@ def subsumes(k1, k2):
             any_different = True
     return any_different 
 
-def drop_redundant_filters(attribute_map):            
+def drop_redundant_filters(attribute_map, p_remove):            
     to_drop = []
     for k1, denot1 in attribute_map.items():
         for k2, denot2 in attribute_map.items(): 
@@ -258,11 +260,13 @@ def drop_redundant_filters(attribute_map):
                 # sanity check 
                 assert(len(denot1) <= len(denot2)) 
                 if len(denot1) == len(denot2):
-                    to_drop.append(k1)
+                    do_remove = np.random.choice([True, False], p=[p_remove, 1-p_remove])
+                    if do_remove:
+                        to_drop.append(k1)
     new_attribute_map = {k:v for k, v in attribute_map.items() if k not in to_drop}
     return new_attribute_map
     
-def find_partfilter_options(objectpart_idxs, scene_struct, metadata, remove_redundant=False):
+def find_partfilter_options(objectpart_idxs, scene_struct, metadata, remove_redundant=0.0):
     # objectpart_idxs: dicts{obj_id: [part_ids]}
     # Keys are tuples (size, color, Partname, material) (where some may be None)
     # and values are dicts{obj_id: [part_ids]} that match the filter criterion
@@ -290,7 +294,7 @@ def find_partfilter_options(objectpart_idxs, scene_struct, metadata, remove_redu
             attribute_map[k][obj_idx].update(res)
     return attribute_map
 
-def find_filter_options(object_idxs, scene_struct, metadata, remove_redundant=False):
+def find_filter_options(object_idxs, scene_struct, metadata, remove_redundant=0.0):
     # Keys are tuples (size, color, shape, material) (where some may be None)
     # and values are lists of object idxs that match the filter criterion
 
@@ -325,7 +329,7 @@ def add_empty_filter_options(attribute_map, metadata, num_to_add):
 
 
 def find_relate_filter_options(object_idx, scene_struct, metadata,
-        unique=False, include_zero=False, trivial_frac=0.1, remove_redundant=False):
+        unique=False, include_zero=False, trivial_frac=0.1, remove_redundant=0.0):
     options = {}
     if '_filter_options' not in scene_struct:
         precompute_filter_options(scene_struct, metadata, remove_redundant=remove_redundant)
@@ -401,13 +405,43 @@ def other_heuristic(text, param_vals):
     return text
 
 
+def get_question_hash(scene_struct, question):
+    """
+    get a question hash that can be compared whether or not we have redundant 
+    descriptions in referring expressions. Should be based on:
+    - the query object 
+    - the query part 
+    - the query attribute 
+    """
+    obj_name, part_name, query_name = None, None, None
+    for filter_step in question:
+        if filter_step['type'] == 'unique': 
+            output = filter_step['_output']
+            if type(output) == str and "_" in output:
+                object_idx, part_idx = [int(x) for x in output.split("_")]
+            else:
+                object_idx, part_idx = output, None
+
+            obj =  scene_struct['objects'][object_idx]
+            obj_name = obj['shape']
+            if part_idx is not None:
+                part_name = obj['_parts'][part_idx]['partname']
+
+        if filter_step['type'].startswith("query"):
+            query_name = filter_step['type']
+    assert(obj_name is not None)
+    assert(part_name is not None)
+    assert(query_name is not None)
+    question_hash = f"{obj_name}_{part_name}_{query_name}"
+    return question_hash 
+
 def instantiate_templates_dfs(scene_struct, 
                               template, 
                               metadata, 
                               answer_counts,
                               synonyms, 
                               max_instances=None, 
-                              remove_redundant=False,
+                              remove_redundant=0.0,
                               verbose=False):
 
     param_name_to_type = {p['name']: p['type'] for p in template['params']} 
@@ -880,6 +914,7 @@ def main(args):
                 print('that took ', toc - tic)
             image_index = int(os.path.splitext(scene_fn)[0].split('_')[-1])
             for t, q, a in zip(ts, qs, ans):
+                question_hash = get_question_hash(scene_struct, q)
                 questions.append({
                     'split': scene_info['split'],
                     'image_filename': scene_fn,
@@ -890,6 +925,7 @@ def main(args):
                     'answer': a,
                     'template_filename': fn,
                     'question_family_index': idx,
+                    'question_hash': question_hash, 
                     'question_index': len(questions),
                 })
             if len(ts) > 0:
@@ -922,6 +958,8 @@ def main(args):
             else:
                 f['value_inputs'] = []
 
+    # sort by question hash 
+    questions = sorted(questions, key=lambda x: x['question_hash'])
     with open(args.output_questions_file, 'w') as f:
         print('Writing output to %s' % args.output_questions_file)
         for q in questions:

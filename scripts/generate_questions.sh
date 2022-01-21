@@ -10,7 +10,7 @@ cd question_generation
 
 # Generate questions with part template for super-CLEVR
 python generate_questions.py \
-    --input_scene_file ../output/superCLEVR_scenes.json \
+    --input_scene_file ../output/test_scenes.json \
     --scene_start_idx 0 \
     --num_scenes 5 \
     --instances_per_template 5 \
