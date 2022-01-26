@@ -10,6 +10,7 @@ import argparse, json, os, itertools, random, shutil
 import time
 import re
 import pdb
+import copy
 from pprint import pprint
 import numpy as np 
 random.seed(120)
@@ -263,6 +264,9 @@ def drop_redundant_filters(attribute_map, p_remove):
                     do_remove = np.random.choice([True, False], p=[p_remove, 1-p_remove])
                     if do_remove:
                         to_drop.append(k1)
+
+    # use None as sentinel for later 
+    # new_attribute_map = {k:v if k not in to_drop else None for k, v in attribute_map.items()}
     new_attribute_map = {k:v for k, v in attribute_map.items() if k not in to_drop}
     return new_attribute_map
     
@@ -286,12 +290,19 @@ def find_partfilter_options(objectpart_idxs, scene_struct, metadata, remove_redu
 
         part_idx_list = set(part_idxs[obj_idx])
         for k, vs in scene_struct['objects'][obj_idx]['_partfilter_options'].items():
-            res = sorted(list(part_idx_list & vs))
+            if vs is None:
+                res = None
+            else:
+                res = sorted(list(part_idx_list & vs))
             if k not in attribute_map:
                 attribute_map[k] = {}
             if obj_idx not in attribute_map[k]:
                 attribute_map[k][obj_idx] = set()
-            attribute_map[k][obj_idx].update(res)
+            if res is not None:
+                attribute_map[k][obj_idx].update(res)
+            else:
+                attribute_map[k][obj_idx] = res
+
     return attribute_map
 
 def find_filter_options(object_idxs, scene_struct, metadata, remove_redundant=0.0):
@@ -304,7 +315,10 @@ def find_filter_options(object_idxs, scene_struct, metadata, remove_redundant=0.
     attribute_map = {}
     object_idxs = set(object_idxs)
     for k, vs in scene_struct['_filter_options'].items():
-        attribute_map[k] = sorted(list(object_idxs & vs))
+        if vs is None:
+            attribute_map[k] = None
+        else:
+            attribute_map[k] = sorted(list(object_idxs & vs))
     return attribute_map
 
 
@@ -323,7 +337,7 @@ def add_empty_filter_options(attribute_map, metadata, num_to_add):
 
     target_size = len(attribute_map) + num_to_add
     while len(attribute_map) < target_size:
-        k = (random.choice(v) for v in attr_vals)
+        k = tuple([random.choice(v) for v in attr_vals])
         if k not in attribute_map:
             attribute_map[k] = []
 
@@ -353,6 +367,7 @@ def find_relate_filter_options(object_idx, scene_struct, metadata,
     N, f = len(options), trivial_frac
     num_trivial = int(round(N * f / (1 - f)))
     trivial_options = list(trivial_options.items())
+    trivial_options = sorted(trivial_options, key = lambda x: str(x))
     random.shuffle(trivial_options)
     for k, v in trivial_options[:num_trivial]:
         options[k] = v
@@ -405,7 +420,7 @@ def other_heuristic(text, param_vals):
     return text
 
 
-def get_question_hash(scene_struct, question):
+def get_question_hash(image_idx, scene_struct, question):
     """
     get a question hash that can be compared whether or not we have redundant 
     descriptions in referring expressions. Should be based on:
@@ -414,6 +429,8 @@ def get_question_hash(scene_struct, question):
     - the query attribute 
     """
     obj_name, part_name, query_name = None, None, None
+    if question == "ERROR": 
+        return "ERROR"
     for filter_step in question:
         if filter_step['type'] == 'unique': 
             output = filter_step['_output']
@@ -432,8 +449,17 @@ def get_question_hash(scene_struct, question):
     assert(obj_name is not None)
     assert(part_name is not None)
     assert(query_name is not None)
-    question_hash = f"{obj_name}_{part_name}_{query_name}"
+    question_hash = f"{image_idx}_{obj_name}_{part_name}_{query_name}"
     return question_hash 
+
+def get_equivalent_filter(k, keys, options):
+    # k format is (size, color, shape, material)
+    # equivalent filters refer to the same shape and material 
+    equivalent_filters = [k2 for k2 in keys if k2[-1] == k[-1] and k2[-2] == k[-2] and options[k2] is not None]
+    if len(equivalent_filters) == 0:
+        return None
+    return random.choice(equivalent_filters)
+
 
 def instantiate_templates_dfs(scene_struct, 
                               template, 
@@ -457,6 +483,10 @@ def instantiate_templates_dfs(scene_struct,
     reject_count = 0
     while states:
         state = states.pop()
+
+        if state is None:
+            final_states.append( None )
+            continue
 
         # Check to make sure the current state is valid
         q = {'nodes': state['nodes']}
@@ -590,10 +620,10 @@ def instantiate_templates_dfs(scene_struct,
                     # Get rid of all filter options that don't result in a single object
                     if part_flag == '':
                         filter_options = {k: v for k, v in filter_options.items()
-                                                        if len(v) == 1}
+                                                        if v is None or len(v) == 1}
                     else:
                         filter_options = {k: v for k, v in filter_options.items()
-                                                        if len(v) == 1 and len(list(v.values())[0]) == 1}
+                                                    if (len(v) == 1 and list(v.values())[0] is None) or (len(v) == 1 and len(list(v.values())[0]) == 1) }
                 else:
                     # Add some filter options that do NOT correspond to the scene
                     if unified_node_type == 'filter_exist':
@@ -601,12 +631,25 @@ def instantiate_templates_dfs(scene_struct,
                         num_to_add = len(filter_options)
                     elif unified_node_type == 'filter_count' or unified_node_type == 'filter':
                         # For filter_count add nulls equal to the number of singletons
-                        num_to_add = sum(1 for k, v in filter_options.items() if len(v) == 1)
+                        num_to_add = sum(1 for k, v in filter_options.items() if v is None or len(v) == 1)
                     add_empty_filter_options(filter_options, metadata, num_to_add)
 
             filter_option_keys = list(filter_options.keys())
+            filter_option_keys = sorted(filter_option_keys, key=lambda x: [str(y) for y in x])
             random.shuffle(filter_option_keys)
+
             for k in filter_option_keys:
+                if filter_options[k] is None:
+                    k = get_equivalent_filter(k, filter_option_keys, filter_options)
+                    if k is None:
+                        # we cannot find any equivalent non-redundant filters, so error out 
+                        # for the whole example 
+                        states.append(None)
+                        continue 
+                        # pdb.set_trace()
+
+
+
                 new_nodes = []
                 cur_next_vals = {k: v for k, v in state['vals'].items()}
                 next_input = state['input_map'][next_node['inputs'][0]]
@@ -681,6 +724,7 @@ def instantiate_templates_dfs(scene_struct,
             param_name = next_node['side_inputs'][0]
             param_type = param_name_to_type[param_name]
             param_vals = metadata['types'][param_type][:]
+            param_vals = sorted(param_vals, key= lambda x: str(x))
             random.shuffle(param_vals)
             for val in param_vals:
                 input_map = {k: v for k, v in state['input_map'].items()}
@@ -914,7 +958,7 @@ def main(args):
                 print('that took ', toc - tic)
             image_index = int(os.path.splitext(scene_fn)[0].split('_')[-1])
             for t, q, a in zip(ts, qs, ans):
-                question_hash = get_question_hash(scene_struct, q)
+                question_hash = get_question_hash(image_index, scene_struct, q)
                 questions.append({
                     'split': scene_info['split'],
                     'image_filename': scene_fn,
@@ -951,6 +995,8 @@ def main(args):
     # dirty solution is to keep the code above as-is, but here make "value_inputs"
     # an empty list for those functions that do not have "side_inputs". Gross.
     for q in questions:
+        if q['question_hash'] == "ERROR":
+            continue
         for f in q['program']:
             if 'side_inputs' in f:
                 f['value_inputs'] = f['side_inputs']
@@ -958,8 +1004,13 @@ def main(args):
             else:
                 f['value_inputs'] = []
 
+
     # sort by question hash 
-    questions = sorted(questions, key=lambda x: x['question_hash'])
+    # questions = sorted(questions, key=lambda x: x['question_hash'])
+    # filter out the Nones 
+    exclude = "(<Z>)|(<C>)|(<M>)|(<S>)"
+    questions = [x for x in questions if re.search(exclude, x['question']) is None]
+
     with open(args.output_questions_file, 'w') as f:
         print('Writing output to %s' % args.output_questions_file)
         for q in questions:
