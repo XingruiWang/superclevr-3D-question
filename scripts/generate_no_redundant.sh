@@ -13,12 +13,20 @@ python generate_questions.py \
     --input_scene_file ../output/superCLEVR_scenes.json \
     --scene_start_idx 0 \
     --num_scenes 5 \
-    --instances_per_template 5 \
-    --templates_per_image 10 \
+    --instances_per_template 300 \
+    --templates_per_image 400 \
     --remove_redundant 1.0 \
     --metadata_file metadata_part.json \
     --template_dir super_clevr_templates \
     --output_questions_file ../output/superCLEVR_questions_part_remove_redundant.json
+
+# Align to the non-redundant examples 
+ python align_removed.py \
+    --kept-file ../output/superCLEVR_questions_part.json \
+    --new-file ../output/superCLEVR_questions_part_remove_redundant.json \
+    --out-file ../output/superCLEVR_questions_part_aligned.json
+
+ echo "wrote output to ../output/superCLEVR_questions_part_aligned.json"
 
 #@ Generate questions with original CLEVR template for super-CLEVR
 # python generate_questions.py \

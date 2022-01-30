@@ -290,18 +290,12 @@ def find_partfilter_options(objectpart_idxs, scene_struct, metadata, remove_redu
 
         part_idx_list = set(part_idxs[obj_idx])
         for k, vs in scene_struct['objects'][obj_idx]['_partfilter_options'].items():
-            if vs is None:
-                res = None
-            else:
-                res = sorted(list(part_idx_list & vs))
+            res = list(part_idx_list & vs)
             if k not in attribute_map:
                 attribute_map[k] = {}
             if obj_idx not in attribute_map[k]:
                 attribute_map[k][obj_idx] = set()
-            if res is not None:
-                attribute_map[k][obj_idx].update(res)
-            else:
-                attribute_map[k][obj_idx] = res
+            attribute_map[k][obj_idx].update(res)
 
     return attribute_map
 
@@ -315,10 +309,7 @@ def find_filter_options(object_idxs, scene_struct, metadata, remove_redundant=0.
     attribute_map = {}
     object_idxs = set(object_idxs)
     for k, vs in scene_struct['_filter_options'].items():
-        if vs is None:
-            attribute_map[k] = None
-        else:
-            attribute_map[k] = sorted(list(object_idxs & vs))
+        attribute_map[k] = list(object_idxs & vs)
     return attribute_map
 
 
@@ -367,7 +358,7 @@ def find_relate_filter_options(object_idx, scene_struct, metadata,
     N, f = len(options), trivial_frac
     num_trivial = int(round(N * f / (1 - f)))
     trivial_options = list(trivial_options.items())
-    trivial_options = sorted(trivial_options, key = lambda x: str(x))
+    # trivial_options = sorted(trivial_options, key = lambda x: str(x))
     random.shuffle(trivial_options)
     for k, v in trivial_options[:num_trivial]:
         options[k] = v
@@ -420,7 +411,7 @@ def other_heuristic(text, param_vals):
     return text
 
 
-def get_question_hash(image_idx, scene_struct, question):
+def get_question_hash(image_idx, scene_struct, question, text):
     """
     get a question hash that can be compared whether or not we have redundant 
     descriptions in referring expressions. Should be based on:
@@ -431,7 +422,15 @@ def get_question_hash(image_idx, scene_struct, question):
     obj_name, part_name, query_name = None, None, None
     if question == "ERROR": 
         return "ERROR"
-    for filter_step in question:
+    query_start = question[-1]
+    query_type = query_start['type']
+    parents = query_start['inputs']
+
+    ops = []
+    while len(parents) > 0:
+        par_idx = parents.pop()
+        filter_step = question[par_idx]
+
         if filter_step['type'] == 'unique': 
             output = filter_step['_output']
             if type(output) == str and "_" in output:
@@ -439,17 +438,24 @@ def get_question_hash(image_idx, scene_struct, question):
             else:
                 object_idx, part_idx = output, None
 
-            obj =  scene_struct['objects'][object_idx]
+            obj = scene_struct['objects'][object_idx]
             obj_name = obj['shape']
+            obj_name = f"{object_idx}_{obj_name}"
+            ops.append(obj_name)
             if part_idx is not None:
                 part_name = obj['_parts'][part_idx]['partname']
+                ops.append(part_name)
+            
+            parents += filter_step['inputs']
 
-        if filter_step['type'].startswith("query"):
-            query_name = filter_step['type']
-    assert(obj_name is not None)
-    assert(part_name is not None)
-    assert(query_name is not None)
-    question_hash = f"{image_idx}_{obj_name}_{part_name}_{query_name}"
+    # assert(obj_name is not None)
+    # assert(part_name is not None)
+    # assert(query_name is not None)
+    # question_hash = f"{image_idx}_{obj_name}_{part_name}_{query_name}"
+
+    
+    question_hash = "_".join([query_type] + ops)
+    question_hash = f"{image_idx}_{question_hash}"
     return question_hash 
 
 def get_equivalent_filter(k, keys, options):
@@ -483,10 +489,6 @@ def instantiate_templates_dfs(scene_struct,
     reject_count = 0
     while states:
         state = states.pop()
-
-        if state is None:
-            final_states.append( None )
-            continue
 
         # Check to make sure the current state is valid
         q = {'nodes': state['nodes']}
@@ -620,10 +622,10 @@ def instantiate_templates_dfs(scene_struct,
                     # Get rid of all filter options that don't result in a single object
                     if part_flag == '':
                         filter_options = {k: v for k, v in filter_options.items()
-                                                        if v is None or len(v) == 1}
+                                                       if len(v) == 1}
                     else:
                         filter_options = {k: v for k, v in filter_options.items()
-                                                    if (len(v) == 1 and list(v.values())[0] is None) or (len(v) == 1 and len(list(v.values())[0]) == 1) }
+                                                    if len(v) == 1 and len(list(v.values())[0]) == 1 }
                 else:
                     # Add some filter options that do NOT correspond to the scene
                     if unified_node_type == 'filter_exist':
@@ -631,22 +633,22 @@ def instantiate_templates_dfs(scene_struct,
                         num_to_add = len(filter_options)
                     elif unified_node_type == 'filter_count' or unified_node_type == 'filter':
                         # For filter_count add nulls equal to the number of singletons
-                        num_to_add = sum(1 for k, v in filter_options.items() if v is None or len(v) == 1)
+                        num_to_add = sum(1 for k, v in filter_options.items() if len(v) == 1)
                     add_empty_filter_options(filter_options, metadata, num_to_add)
 
             filter_option_keys = list(filter_options.keys())
-            filter_option_keys = sorted(filter_option_keys, key=lambda x: [str(y) for y in x])
+            # filter_option_keys = sorted(filter_option_keys, key=lambda x: [str(y) for y in x])
             random.shuffle(filter_option_keys)
 
             for k in filter_option_keys:
-                if filter_options[k] is None:
-                    k = get_equivalent_filter(k, filter_option_keys, filter_options)
-                    if k is None:
-                        # we cannot find any equivalent non-redundant filters, so error out 
-                        # for the whole example 
-                        states.append(None)
-                        continue 
-                        # pdb.set_trace()
+                #if filter_options[k] is None:
+                #    k = get_equivalent_filter(k, filter_option_keys, filter_options)
+                #    if k is None:
+                #        # we cannot find any equivalent non-redundant filters, so error out 
+                #        # for the whole example 
+                #        states.append(None)
+                #        continue 
+                #        # pdb.set_trace()
 
 
 
@@ -724,7 +726,7 @@ def instantiate_templates_dfs(scene_struct,
             param_name = next_node['side_inputs'][0]
             param_type = param_name_to_type[param_name]
             param_vals = metadata['types'][param_type][:]
-            param_vals = sorted(param_vals, key= lambda x: str(x))
+            # param_vals = sorted(param_vals, key= lambda x: str(x))
             random.shuffle(param_vals)
             for val in param_vals:
                 input_map = {k: v for k, v in state['input_map'].items()}
@@ -958,7 +960,7 @@ def main(args):
                 print('that took ', toc - tic)
             image_index = int(os.path.splitext(scene_fn)[0].split('_')[-1])
             for t, q, a in zip(ts, qs, ans):
-                question_hash = get_question_hash(image_index, scene_struct, q)
+                question_hash = get_question_hash(image_index, scene_struct, q, t)
                 questions.append({
                     'split': scene_info['split'],
                     'image_filename': scene_fn,
