@@ -4,7 +4,7 @@ from tqdm import tqdm
 
 def main():
     all_scene_paths = []
-    output_scene_dir = 'output/scenes'
+    output_scene_dir = 'output/ver_texture/scenes'
     
     # prefix = 'superCLEVR_new_'
     # num_digits = 6
@@ -36,7 +36,7 @@ def main():
         },
         'scenes': all_scenes
     }
-    output_scene_file = 'output/superCLEVR_scenes.json'
+    output_scene_file = 'output/ver_texture/superCLEVR_scenes.json'
     with open(output_scene_file, 'w') as f:
         json.dump(output, f)
         

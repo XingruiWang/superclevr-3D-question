@@ -12,9 +12,8 @@ import re
 import pdb
 import copy
 from pprint import pprint
-import numpy as np 
-random.seed(120)
-np.random.seed(120)
+import numpy as np
+from sqlalchemy import null 
 
 import question_engine as qeng
 
@@ -85,7 +84,7 @@ parser.add_argument('--instances_per_template', default=1, type=int,
 
 # Misc
 parser.add_argument("--remove_redundant", type = float, default = 0.0, 
-        help="Filter out redundant filters in the question generation prodecure. Will filter out with probability, default is 0, no filtering.")
+        help="-1.0 ~ +1.0. Filter out (>0) or add (<0) redundant filters in the question generation prodecure. Will filter out with probability, default is 0, no filtering.")
 parser.add_argument('--reset_counts_every', default=250, type=int,
         help="How often to reset template and answer counts. Higher values will " +
                  "result in flatter distributions over templates and answers, but " +
@@ -411,7 +410,7 @@ def other_heuristic(text, param_vals):
     return text
 
 
-def get_question_hash(image_idx, scene_struct, question, text):
+def get_question_hash(image_idx, scene_struct, _question, text):
     """
     get a question hash that can be compared whether or not we have redundant 
     descriptions in referring expressions. Should be based on:
@@ -419,6 +418,7 @@ def get_question_hash(image_idx, scene_struct, question, text):
     - the query part 
     - the query attribute 
     """
+    question = copy.deepcopy(_question)
     obj_name, part_name, query_name = None, None, None
     if question == "ERROR": 
         return "ERROR"
@@ -477,6 +477,12 @@ def instantiate_templates_dfs(scene_struct,
                               verbose=False):
 
     param_name_to_type = {p['name']: p['type'] for p in template['params']} 
+    
+    null_params = []
+    for constraint in template['constraints']:
+        if constraint['type'] == 'NULL':
+            p = constraint['params'][0]
+            null_params.append(p)
 
     initial_state = {
         'nodes': [node_shallow_copy(template['nodes'][0])],
@@ -572,6 +578,8 @@ def instantiate_templates_dfs(scene_struct,
             if has_relate:
                 degen = qeng.is_degenerate(q, metadata, scene_struct, answer=answer,
                                                                      verbose=verbose)
+                # if remove_redundant < 0, then keep degenerated questions with prob=-remove_redundant
+                degen &= (np.random.random() >= -remove_redundant)
                 if degen:
                     reject_count += 1
                     continue
@@ -683,7 +691,7 @@ def instantiate_templates_dfs(scene_struct,
                         })
                         cur_next_vals[param_name] = param_val
                         next_input = len(state['nodes']) + len(new_nodes) - 1
-                    elif param_val is None:
+                    elif param_val is None:                                
                         if metadata['dataset'] == 'CLEVR-v1.0' and param_type == 'Shape':
                             param_val = 'thing'
                         elif metadata['dataset'] == 'CLEVR-v1.0' and param_type == 'Partname':
@@ -691,6 +699,42 @@ def instantiate_templates_dfs(scene_struct,
                         else:
                             param_val = ''
                         cur_next_vals[param_name] = param_val
+                    
+                # add redundant modules here
+                to_add_redundant = [param_name for param_name, param_val in zip(filter_side_inputs, k) if param_val is None]
+                to_add_redundant = [a for a in to_add_redundant if a not in null_params]
+                # if remove_redundant < 0 (-1~0), then keep to_add_redundant with p=(-remove_redundant)
+                to_add_redundant = list(filter(lambda a: np.random.random() <= -remove_redundant, to_add_redundant))
+                _outputs = qeng.answer_question({'nodes':state['nodes']+new_nodes}, metadata, scene_struct, all_outputs=True)
+                def check_common_attr(objs, param_type):
+                    attrs = []
+                    for obj in objs:
+                        if type(obj)==int:
+                            attr = scene_struct['objects'][obj][param_type]
+                        else:
+                            assert('_' in obj)
+                            obj_id, part_id = [int(a) for a in obj.split('_')]
+                            part_name = metadata['types']['Partname'][scene_struct['objects'][obj_id]["shape"]][part_id]
+                            attr = scene_struct['objects'][obj_id]['parts'][part_name][param_type]
+                        attrs.append(attr)  
+                    if len(set(attrs)) == 1:
+                        return attrs[0]
+                    else:
+                        return None
+                for param_name in to_add_redundant:
+                    param_type = param_name_to_type[param_name]
+                    param_val = check_common_attr(_outputs[-1], param_type.lower())
+                    if param_val is not None:
+                        filter_type = part_flag + 'filter_%s' % param_type.lower()
+                        if param_val is not None:
+                            new_nodes.append({
+                                'type': filter_type,
+                                'inputs': [next_input],
+                                'side_inputs': [param_val],
+                            })
+                            cur_next_vals[param_name] = param_val
+                            next_input = len(state['nodes']) + len(new_nodes) - 1
+                
                 input_map = {k: v for k, v in state['input_map'].items()}
                 extra_type = None
                 if next_node['type'].endswith('unique'):
@@ -764,7 +808,7 @@ def instantiate_templates_dfs(scene_struct,
             
 
     # Actually instantiate the template with the solutions we've found
-    text_questions, structured_questions, answers = [], [], []
+    text_questions, structured_questions, answers, box_token_mappings = [], [], [], []
     for state in final_states:
         structured_questions.append(state['nodes'])
         answer = post_process_part_name(state['answer'])
@@ -772,22 +816,137 @@ def instantiate_templates_dfs(scene_struct,
             answer = metadata['types']['Shapename'][answer]
         answers.append(answer)
         text = random.choice(template['text'])
-        for name, val in state['vals'].items():
-            if val in synonyms:
-                val = random.choice(synonyms[val])
-            elif val in metadata['types']['Shapename']:
-                val = metadata['types']['Shapename'][val]
-            else:
-                val = post_process_part_name(val)
-            text = text.replace(name, val)
-            text = ' '.join(text.split())
+        # for name, val in state['vals'].items():
+        #     if val in synonyms:
+        #         val = random.choice(synonyms[val])
+        #     elif val in metadata['types']['Shapename']:
+        #         val = metadata['types']['Shapename'][val]
+        #     else:
+        #         val = post_process_part_name(val)
+        #     text = text.replace(name, val)
+        #     text = ' '.join(text.split())
         text = replace_optionals(text)
         text = ' '.join(text.split())
         text = other_heuristic(text, state['vals'])
+        text, box_token_mapping = get_box_token_mapping(state, metadata, template, text, synonyms)
         text_questions.append(text)
+        box_token_mappings.append(box_token_mapping)
 
-    return text_questions, structured_questions, answers
+    return text_questions, structured_questions, answers, box_token_mappings
 
+PARAM_REG = re.compile(r"<.\d?>") 
+OTHER_QUES = re.compile(r"(?:Is|Are) there ((?:anything else|any other thing)s?) that")
+OTHER_COUNT_QUES = re.compile(r"(?:How many|What number of) (other (?:thing|object)s?)")       
+def get_box_token_mapping(state, metadata, template, text, synonyms):
+    box_token_mapping = {}
+    # find the output objects (output_objs) for current node (super_node_idx, node_idx)
+    node_outputs = {}
+    for super_node_idx in state['input_map'].keys():
+        if super_node_idx == 0:
+            continue
+        
+        output_objs = []
+        curr_node_idx = state['input_map'][super_node_idx]
+        last_node_idx = state['input_map'][super_node_idx-1]
+        node_idx = None
+        for node_idx in range(curr_node_idx, last_node_idx, -1):
+            curr_node = state['nodes'][node_idx]
+            if metadata['_functions_by_name'][curr_node['type']]['output'] in ['Object', 'ObjectSet', 'Part', 'PartSet']:
+                output_objs = curr_node['_output']
+                break
+        if type(output_objs) != list:
+            output_objs = [output_objs]
+        if node_idx is None:
+            inp_super_node_idx = template['nodes'][super_node_idx]['inputs'][0]
+            output_objs = node_outputs.get(inp_super_node_idx, {'output_objs':[]})['output_objs']
+        node_outputs[super_node_idx] = {'node_idx': node_idx, 'output_objs': output_objs, 'tokens':[]}
+        #if curr_node_idx == last_node_idx:
+        #    pdb.set_trace()
+    for super_node_idx in state['input_map'].keys():
+        if 'same' in template['nodes'][super_node_idx]['type']:
+            if template['nodes'][super_node_idx+1]['inputs'][0] == super_node_idx and 'filter' in template['nodes'][super_node_idx+1]['type']:
+                node_outputs[super_node_idx]['output_objs'] = node_outputs[super_node_idx+1]['output_objs']
+    
+    # find the super_node_idx for each param: {'<M>': super_node_idx}
+    param_snodeidx_map = {}
+    for super_node_idx in state['input_map'].keys():
+        if 'side_inputs' not in template['nodes'][super_node_idx]:
+            continue
+        for side_input in template['nodes'][super_node_idx]['side_inputs']:
+            param_snodeidx_map[side_input] = super_node_idx
+    
+    sorted_side_inputs = re.findall(PARAM_REG, text) 
+    
+    # find token idx for each side_input, and append result to node_outputs
+    for side_input in sorted_side_inputs:       
+        super_node_idx = param_snodeidx_map[side_input]
+        # find the token idx for current node
+        val = state['vals'][side_input]
+        if val in synonyms:
+            val = random.choice(synonyms[val])
+        elif val in metadata['types']['Shapename']:
+            val = metadata['types']['Shapename'][val]
+        else:
+            val = post_process_part_name(val)
+        
+        token_start_idx = text.find(side_input)
+        token_end_idx = token_start_idx+len(val)
+        
+        text = text.replace(side_input, val)
+        text = ' '.join(text.split())
+        
+        last_word = text[:token_start_idx].split()[-1]
+        # add determinant
+        # if last_word in ['a', 'the', 'other', 'another'] and len(node_outputs[super_node_idx]['tokens'])==0:
+        #     if token_end_idx == token_start_idx:
+        #         token_end_idx -= 1
+        #     token_start_idx = token_start_idx-len(last_word)-1
+        if text[token_end_idx]=='s': # hacky way to handle 's' 'es', eg bikes
+            token_end_idx += 1
+        elif text[token_end_idx]=='e':
+            token_end_idx += 2
+        if token_end_idx != token_start_idx:
+            node_outputs[super_node_idx]['tokens'].append([token_start_idx, token_end_idx])     
+        
+    
+    # only filter**, sam** node can produce obj output
+    ## TODO: maybe also relate?
+    for super_node_idx, o in node_outputs.items():
+        super_node_type = template['nodes'][super_node_idx]['type']
+        if 'filter' not in super_node_type and 'same' not in super_node_type:
+            continue
+        for obj in o['output_objs']:
+            if obj not in box_token_mapping:
+                box_token_mapping[obj] = []
+            box_token_mapping[obj].extend(o['tokens'])
+    
+    # for nodes that does not have side_inputs (eg same, and, or)
+    for super_node_idx, super_node in enumerate(template['nodes']):
+        node_type = super_node['type']
+        ## and, or do not need special handling, e.g., thing, to the right of, to the left of
+        ## same
+        if 'same' in node_type:
+            same_str = ' '.join(node_type.split('_'))
+            output_objs = node_outputs[super_node_idx]['output_objs']
+            token_start_idx = text.find(same_str)
+            token_end_idx = token_start_idx + len(same_str)
+            for obj in output_objs:
+                box_token_mapping[obj].append([token_start_idx, token_end_idx])
+            for other_re in [OTHER_QUES, OTHER_COUNT_QUES]:
+                other_match = re.match(other_re, text)
+                if other_match is not None:
+                    for obj in output_objs:
+                        box_token_mapping[obj].append(list(other_match.span(1)))
+            
+    
+    # remove repeated entries
+    # box_token_mapping = {obj: list(set(b)) for obj, b in box_token_mapping.items()}
+        
+    # print(text)
+    # for obj, maps in box_token_mapping.items():
+    #     print(obj, maps, [text[m[0]:m[1]] for m in maps])  
+    
+    return text, box_token_mapping
 
 def replace_optionals(s):
     """
@@ -946,7 +1105,10 @@ def main(args):
                 print('trying template ', fn, idx)
             if args.time_dfs and args.verbose:
                 tic = time.time()
-            ts, qs, ans = instantiate_templates_dfs(
+            
+            random.seed(len(questions))
+            np.random.seed(len(questions))
+            ts, qs, ans, bmaps = instantiate_templates_dfs(
                                             scene_struct,
                                             template,
                                             metadata,
@@ -959,7 +1121,7 @@ def main(args):
                 toc = time.time()
                 print('that took ', toc - tic)
             image_index = int(os.path.splitext(scene_fn)[0].split('_')[-1])
-            for t, q, a in zip(ts, qs, ans):
+            for t, q, a, bmap in zip(ts, qs, ans, bmaps):
                 question_hash = get_question_hash(image_index, scene_struct, q, t)
                 questions.append({
                     'split': scene_info['split'],
@@ -969,6 +1131,7 @@ def main(args):
                     'question': t,
                     'program': q,
                     'answer': a,
+                    'obj_map': bmap,
                     'template_filename': fn,
                     'question_family_index': idx,
                     'question_hash': question_hash, 
@@ -1015,8 +1178,6 @@ def main(args):
 
     with open(args.output_questions_file, 'w') as f:
         print('Writing output to %s' % args.output_questions_file)
-        for q in questions:
-            q.pop('program')
         json.dump({
                 'info': scene_info,
                 'questions': questions,
