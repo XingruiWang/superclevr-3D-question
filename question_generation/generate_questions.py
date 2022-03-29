@@ -901,16 +901,12 @@ def get_box_token_mapping(state, metadata, template, text, synonyms):
         #     if token_end_idx == token_start_idx:
         #         token_end_idx -= 1
         #     token_start_idx = token_start_idx-len(last_word)-1
-        try:
-            if text[token_end_idx]=='s': # hacky way to handle 's' 'es', eg bikes
-                token_end_idx += 1
-            elif text[token_end_idx]=='e':
-                token_end_idx += 2
-            if token_end_idx != token_start_idx:
-                node_outputs[super_node_idx]['tokens'].append([token_start_idx, token_end_idx])     
-        except IndexError:
-            pdb.set_trace()  
-            print("error")
+        if text[token_end_idx]=='s': # hacky way to handle 's' 'es', eg bikes
+            token_end_idx += 1
+        elif text[token_end_idx]=='e':
+            token_end_idx += 2
+        if token_end_idx != token_start_idx:
+            node_outputs[super_node_idx]['tokens'].append([token_start_idx, token_end_idx])     
     
     # only filter**, sam** node can produce obj output
     ## TODO: maybe also relate?
