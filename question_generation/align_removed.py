@@ -18,8 +18,9 @@ EMPTY_EXAMPLE = {"split": "new",
                  "question_hash": None,
                  "question_index": -1}
 
-def get_candidates(lookup, key, used): 
+def get_candidates(lookup, key, answer, used): 
     all_candidates = lookup[key]
+    all_candidates = [tup for tup in all_candidates if tup[0]['answer'] == answer]
     not_used = [x for x in all_candidates if x[1] not in used]
     if len(not_used) == 0:
         return [("empty", -1)]
@@ -42,7 +43,7 @@ def align(old_data, new_data):
     aligned_data = []
     used = []
     for od in old_data: 
-        candidates = get_candidates(new_lookup, od['question_hash'], used)
+        candidates = get_candidates(new_lookup, od['question_hash'], od['answer'], used)
         if len(candidates) == 1 and candidates[0][1] == -1: 
             chosen_q = copy.deepcopy(EMPTY_EXAMPLE)
             chosen_q['question_hash'] = od['question_hash']
