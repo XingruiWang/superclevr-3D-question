@@ -14,6 +14,7 @@ import math
 import re
 from material_cycles_converter import AutoNode
 from mathutils import Vector
+import numpy as np
 
 
 """
@@ -206,6 +207,7 @@ def modify_mat(mat, color, mat_freq):
         if "Checker Texture" in texture_node.node_tree.nodes:
             texture_node.node_tree.nodes["Checker Texture"].inputs[3].default_value = mat_freq
 
+
 def add_new_mat(mat_name, material_name, color, texture=None, mat_freq=20):
     """
     Create a new material and assign it to the active object. "name" should be the
@@ -382,6 +384,23 @@ def load_properties_json(properties_json, label_dir):
     #         if name not in limited_objs:
     #             obj_info[k].pop(name)
     return color_name_to_rgba, size_mapping, material_mapping, textures, obj_info
+
+
+def load_dist(color_dist_pth, mat_dist_pth, shape_dist_pth, shape_color_co_dist_pth):
+    shape_dist, mat_dist, color_dist, shape_color_co_dist = None, None, None, None
+    if color_dist_pth is not None:
+        color_dist = dict(np.load(color_dist_pth))
+    if mat_dist_pth is not None:
+        mat_dist = dict(np.load(mat_dist_pth))
+    if shape_dist_pth is not None:
+        shape_dist = dict(np.load(shape_dist_pth))
+    if shape_color_co_dist_pth is not None:
+        shape_color_co_dist = dict(np.load(shape_color_co_dist_pth))
+        num_shape, num_color = shape_color_co_dist['dist'].shape
+        shape_color_co_dist['shape_idx_map'] = {name:i for i,name in enumerate(shape_color_co_dist['names'][:num_shape])}
+        shape_color_co_dist['colors'] = shape_color_co_dist['names'][-num_color:]
+    return shape_dist, mat_dist, color_dist, shape_color_co_dist
+
         
 def load_materials(material_dir):
     """

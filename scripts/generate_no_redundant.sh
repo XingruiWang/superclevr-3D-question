@@ -15,7 +15,7 @@ python generate_questions.py \
    --input_scene_file ../output/superCLEVR_scenes_100mb.json \
    --scene_start_idx ${START_IDX} \
    --num_scenes 5 \
-   --instances_per_template 1 \
+   --instances_per_template 10 \
    --templates_per_image 10 \
    --remove_redundant 1.0 \
    --metadata_file metadata_part.json \

@@ -1,10 +1,11 @@
 import os
 import json
 from tqdm import tqdm
+import pdb
 
 def main():
     all_scene_paths = []
-    output_scene_dir = 'output/ver_texture/scenes'
+    output_scene_dir = 'output/dist_texture_a1/scenes'
     
     # prefix = 'superCLEVR_new_'
     # num_digits = 6
@@ -24,7 +25,11 @@ def main():
     all_scenes = []
     for scene_path in tqdm(all_scene_paths):
         with open(scene_path, 'r') as f:
-            all_scenes.append(json.load(f))
+            try:
+                all_scenes.append(json.load(f))
+            except:
+                print(scene_path)
+                pdb.set_trace()
     
     all_scenes = sorted(all_scenes, key=lambda k: int(k['image_filename'].split('_')[-1].split('.')[0]))
     output = {
@@ -36,7 +41,7 @@ def main():
         },
         'scenes': all_scenes
     }
-    output_scene_file = 'output/ver_texture/superCLEVR_scenes.json'
+    output_scene_file = 'output/dist_texture_a1/superCLEVR_scenes.json'
     with open(output_scene_file, 'w') as f:
         json.dump(output, f)
         

@@ -161,6 +161,21 @@ parser.add_argument('--render_tile_size', default=256, type=int,
 parser.add_argument('--clevr_scene_path', default=None,
         help="the path of CLEVR's scene file")
 
+# dist files
+parser.add_argument('--color_dist_pth', default=None,
+        help="the dir to distribution files")
+parser.add_argument('--mat_dist_pth', default=None,
+        help="the dir to distribution files")
+parser.add_argument('--shape_dist_pth', default=None,
+        help="the dir to distribution files")
+parser.add_argument('--shape_color_co_dist_pth', default=None,
+        help="the dir to distribution files")
+parser.add_argument('--is_part', default=1, type=int,
+        help="need part or not")
+parser.add_argument('--load_scene', default=1, type=int,
+        help="when sclevr_scene_path is provided, 0 to only load xyz size, 1 to load the scene")
+
+
 
 argv = utils.extract_args()
 args = parser.parse_args(argv)
@@ -175,6 +190,9 @@ def main(args):
     global color_name_to_rgba, size_mapping, material_mapping, textures_mapping, obj_info
     # Load the property file
     color_name_to_rgba, size_mapping, material_mapping, textures_mapping, obj_info = utils.load_properties_json(args.properties_json, os.path.join(args.shape_dir, 'labels'))
+
+    global shape_dist, mat_dist, color_dist, shape_color_co_dist
+    shape_dist, mat_dist, color_dist, shape_color_co_dist = utils.load_dist(args.color_dist_pth, args.mat_dist_pth, args.shape_dist_pth, args.shape_color_co_dist_pth)
 
     num_digits = 6
     prefix = '%s_%s_' % (args.filename_prefix, args.split)
@@ -197,7 +215,7 @@ def main(args):
         
         # positive to render normally, else load the scene and only render the mask
         scene_idx = i + args.start_idx if args.clevr_scene_path is not None else -1
-        image_idx = clevr_scene[scene_idx]['image_index'] if scene_idx >= 0 else i+args.start_idx
+        image_idx = clevr_scene[scene_idx]['image_index'] if (scene_idx >= 0 and args.load_scene) else i+args.start_idx
         
         img_path = img_template % (image_idx)
         scene_path = scene_template % (image_idx)
@@ -350,15 +368,16 @@ def render_scene(args,
             mat_indices[obj.name] = (i, -1, mm_idx)
             mm_idx += 1
             obj.pass_index = i+1
-            for pi, part_name in enumerate(obj_info['info_part'][obj_name]):
-                mat_indices[obj.name+'.'+part_name] = (i, pi, mm_idx)
-                mm_idx += 1
+            if args.is_part:
+                for pi, part_name in enumerate(obj_info['info_part'][obj_name]):
+                    mat_indices[obj.name+'.'+part_name] = (i, pi, mm_idx)
+                    mm_idx += 1
                     
             for mi in range(len(obj.data.materials)):
                 mat = obj.data.materials[mi]
                 if not mat.name.startswith(obj_name): # original materials
                     mat.pass_index = mat_indices[obj.name][2]
-                else:
+                elif args.is_part:
                     part_name = mat.name.split('.')[1]
                     mat.pass_index = mat_indices[obj.name+'.'+part_name][2]
         mat_indices = {v[2]:(v[0], v[1], k) for k,v in mat_indices.items()}
@@ -534,9 +553,10 @@ def add_random_objects(scene_struct, num_objects, args, camera, idx=-1):
         num_objects = len(cob)
     
     print('adding', num_objects, 'objects.')
-    # num_objects = 5
+    
+    first_flag = True if idx >= 0 else False
     for i in range(num_objects):
-        if idx >= 0:
+        if idx >= 0 and args.load_scene:
             sf = cob[i] 
             theta = sf['rotation']
             obj_name = sf['shape']
@@ -548,9 +568,13 @@ def add_random_objects(scene_struct, num_objects, args, camera, idx=-1):
             # Choose a random size
             size_name, r = random.choice(size_mapping)
 
-            # Choose random color and shape
-            obj_name, obj_pth = random.choice(list(obj_info['info_pth'].items()))
-            # obj_name, obj_pth = "suv", "car/473dd606c5ef340638805e546aa28d99"
+            # Choose random shape
+            if shape_dist is None:
+                obj_name, obj_pth = random.choice(list(obj_info['info_pth'].items()))
+                # obj_name, obj_pth = "suv", "car/473dd606c5ef340638805e546aa28d99"
+            else:
+                obj_name = np.random.choice(shape_dist['names'], p=shape_dist['dist'])
+                obj_pth = obj_info['info_pth'][obj_name]
             
             # Try to place the object, ensuring that we don't intersect any existing
             # objects and that we are more than the desired margin away from all existing
@@ -564,10 +588,24 @@ def add_random_objects(scene_struct, num_objects, args, camera, idx=-1):
                     for obj in blender_objects:
                         utils.delete_object(obj)
                     return add_random_objects(scene_struct, num_objects, args, camera)
-                x = random.uniform(-3, 3)
-                y = random.uniform(-3, 3)
-                # Choose random orientation for the object.
-                theta = 360.0 * random.random()
+                
+                # to loading xyz and size only at the first time
+                if first_flag:
+                    print('loading obj ', i)
+                    sf = cob[i] 
+                    theta = sf['rotation']
+                    size_name = sf['size']
+                    r = {a[0]: a[1] for a in size_mapping}[size_name]
+                    x, y = sf['3d_coords'][:2]
+                    obj_name = sf['shape']
+                    obj_pth = obj_info['info_pth'][obj_name]
+                else:
+                    print('placing obj ', i)
+                    x = random.uniform(-3, 3)
+                    y = random.uniform(-3, 3)
+                    # Choose random orientation for the object.
+                    theta = 360.0 * random.random()
+                
                 # Check to make sure the new object is further than min_dist from all
                 # other objects, and further than margin along the four cardinal directions
                 dists_good = True
@@ -617,6 +655,8 @@ def add_random_objects(scene_struct, num_objects, args, camera, idx=-1):
 
                 if dists_good and margins_good:
                     break
+                else:
+                    first_flag = False
 
 
         # Actually add the object to the scene
@@ -628,15 +668,28 @@ def add_random_objects(scene_struct, num_objects, args, camera, idx=-1):
 
         # Attach a random color
         # rgba=(1,0,0,1)
-        if idx >= 0:
+        if idx >= 0 and args.load_scene:
             mat_name_out = sf['material']
             mat_name = {a[1]: a[0] for a in material_mapping}[mat_name_out]
             color_name = sf['color']
             rgba = color_name_to_rgba[color_name]
-            texture = sf.get('texture', None)
+            texture = sf.get('texture', random.choice(textures_mapping))
         else:
-            mat_name, mat_name_out = random.choice(material_mapping)
-            color_name, rgba = random.choice(list(color_name_to_rgba.items()))
+            if mat_dist is None:
+                mat_name, mat_name_out = random.choice(material_mapping)
+            else:
+                mat_name_out = np.random.choice(mat_dist['names'], p=mat_dist['dist'])
+                mat_name = {a[1]: a[0] for a in material_mapping}[mat_name_out]
+                
+            if shape_color_co_dist is not None:
+                _dist = shape_color_co_dist['dist'][shape_color_co_dist['shape_idx_map'][obj_name]]
+                color_name = np.random.choice(shape_color_co_dist['colors'], p=_dist)
+                rgba = color_name_to_rgba[color_name]
+            elif color_dist is None:
+                color_name, rgba = random.choice(list(color_name_to_rgba.items()))
+            else:
+                color_name = np.random.choice(color_dist['names'], p=color_dist['dist'])
+                rgba = color_name_to_rgba[color_name]
             texture = random.choice(textures_mapping)
         mat_freq = {"large":60, "small":30}[size_name]
         if texture=='checkered':
@@ -661,7 +714,7 @@ def add_random_objects(scene_struct, num_objects, args, camera, idx=-1):
         
         obj_pointer.append(current_obj)
 
-        if idx >= 0:
+        if idx >= 0 and args.load_scene and args.is_part:
             part_record = cob[i]['parts']
             for part_name in part_record:
                 part_verts_idxs = obj_info['info_part_labels'][obj_name][part_name]
@@ -669,7 +722,10 @@ def add_random_objects(scene_struct, num_objects, args, camera, idx=-1):
                 part_rgba = color_name_to_rgba[part_color_name]
                 mat_name_out = part_record[part_name]['material']
                 mat_name = {a[1]: a[0] for a in material_mapping}[mat_name_out]
-                part_texture = part_record[part_name]['texture']
+                if 'texture' in part_record[part_name]:
+                    part_texture = part_record[part_name]['texture']
+                else:
+                    part_texture = random.choice(textures_mapping)
                 mat_freq = {"large":60, "small":30}[size_name]
                 if texture=='checkered':
                     mat_freq = mat_freq / 2
@@ -679,13 +735,12 @@ def add_random_objects(scene_struct, num_objects, args, camera, idx=-1):
                 
             objects[i]['parts'] = part_record
     
-    # if idx >= 0:
-    #     return objects, blender_objects
+    if idx >= 0 and args.load_scene:
+        return objects, blender_objects
 
     # Check that all objects are at least partially visible in the rendered image
     all_visible, visible_parts = check_visibility(blender_objects, args.min_pixels_per_object, args.min_pixels_per_part, is_part=True, obj_info=obj_info)
-    pdb.set_trace()
-    print('check vis done')
+    
     if not all_visible:
         # If any of the objects are fully occluded then start over; delete all
         # objects from the scene and place them all again.
@@ -694,41 +749,42 @@ def add_random_objects(scene_struct, num_objects, args, camera, idx=-1):
             utils.delete_object(obj)
         return add_random_objects(scene_struct, num_objects, args, camera)
 
-    for i in range(num_objects):
-        # randomize part material
-        
-        current_obj = obj_pointer[i]
-        obj_name = current_obj.name.split('_')[0]
-        color_name = objects[i]['color']
-        size_name = objects[i]['size']
-        part_list = visible_parts[current_obj.name]
-        part_names = random.sample(part_list, min(3, len(part_list)))
-        # part_name = random.choice(obj_info['info_part'][obj_name])
-        part_record = {}
-        for part_name in part_names:
-            while True:
-                part_color_name, part_rgba = random.choice(list(color_name_to_rgba.items()))
-                if part_color_name != color_name:
-                    break
-            part_name = part_name.split('.')[0]
-            # if part_name not in obj_info['info_part_labels'][obj_name]:
-            #     print(part_name, obj_name, '!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-            #     continue
-            part_verts_idxs = obj_info['info_part_labels'][obj_name][part_name]
-            mat_name, mat_name_out = random.choice(material_mapping)
-            texture = random.choice(textures_mapping)
-            mat_freq = {"large":60, "small":30}[size_name]
-            if texture=='checkered':
-                mat_freq = mat_freq / 2
-            utils.modify_part_color(current_obj, part_name, part_verts_idxs, mat_list=obj_info['info_material'][obj_name], 
-                                    material_name=mat_name, color_name=part_color_name, color=part_rgba,
-                                    texture=texture, mat_freq=mat_freq)
-            part_record[part_name] = {
-                    "color": part_color_name,
-                    "material": mat_name_out,
-                    "size": objects[i]['size'],
-                    "texture": texture
-                    }
+    if args.is_part:
+        for i in range(num_objects):
+            # randomize part material
+            
+            current_obj = obj_pointer[i]
+            obj_name = current_obj.name.split('_')[0]
+            color_name = objects[i]['color']
+            size_name = objects[i]['size']
+            part_list = visible_parts[current_obj.name]
+            part_names = random.sample(part_list, min(3, len(part_list)))
+            # part_name = random.choice(obj_info['info_part'][obj_name])
+            part_record = {}
+            for part_name in part_names:
+                while True:
+                    part_color_name, part_rgba = random.choice(list(color_name_to_rgba.items()))
+                    if part_color_name != color_name:
+                        break
+                part_name = part_name.split('.')[0]
+                # if part_name not in obj_info['info_part_labels'][obj_name]:
+                #     print(part_name, obj_name, '!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+                #     continue
+                part_verts_idxs = obj_info['info_part_labels'][obj_name][part_name]
+                mat_name, mat_name_out = random.choice(material_mapping)
+                texture = random.choice(textures_mapping)
+                mat_freq = {"large":60, "small":30}[size_name]
+                if texture=='checkered':
+                    mat_freq = mat_freq / 2
+                utils.modify_part_color(current_obj, part_name, part_verts_idxs, mat_list=obj_info['info_material'][obj_name], 
+                                        material_name=mat_name, color_name=part_color_name, color=part_rgba,
+                                        texture=texture, mat_freq=mat_freq)
+                part_record[part_name] = {
+                        "color": part_color_name,
+                        "material": mat_name_out,
+                        "size": objects[i]['size'],
+                        "texture": texture
+                        }
                 
         objects[i]['parts'] = part_record
 
