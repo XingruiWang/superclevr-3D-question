@@ -130,8 +130,8 @@ def precompute_filter_options(scene_struct, metadata, remove_redundant=False):
 
     if metadata['dataset'] == 'CLEVR-v1.0':
         # modification 1
-        # attr_keys = ['pose', 'size', 'color', 'material', 'shape']
-        attr_keys = ['size', 'color', 'material', 'shape']
+        attr_keys = ['pose', 'size', 'color', 'material', 'shape']
+        # attr_keys = ['size', 'color', 'material', 'shape']
     else:
         assert False, 'Unrecognized dataset'
 
@@ -172,8 +172,8 @@ def precompute_filter_options(scene_struct, metadata, remove_redundant=False):
                 if masked_key[-1] is not None:
                     hypershape = metadata['_shape_hier'][masked_key[-1]]
                     # modification 2
-                    # masked_key = (masked_key[0], masked_key[1], masked_key[2], masked_key[3], hypershape)
-                    masked_key = (masked_key[0], masked_key[1], masked_key[2], hypershape)
+                    masked_key = (masked_key[0], masked_key[1], masked_key[2], masked_key[3], hypershape)
+                    # masked_key = (masked_key[0], masked_key[1], masked_key[2], hypershape)
                     if masked_key not in attribute_map:
                         attribute_map[masked_key] = set()
                     attribute_map[masked_key].add(object_idx)
@@ -1535,6 +1535,7 @@ def main(args):
                 del f['side_inputs']
             elif 'value_inputs' not in f:
                 f['value_inputs'] = []
+
 
 
     # sort by question hash 
