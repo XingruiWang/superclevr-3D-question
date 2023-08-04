@@ -1,4 +1,14 @@
 # CLEVR Dataset Generation
+
+
+# Computer the occlusion relationship
+
+The original SuperCLEVR dataset doesn't record the occlusion part of each object, which will be uilizied to generate occlusion question. So we need to rerender the objects from the scene and computer the mask of occluded / visible part of each object.
+
+1. Split the scene file
+
+
+
 ## Notes for super-CLEVR
 
 1. To generate pose questions

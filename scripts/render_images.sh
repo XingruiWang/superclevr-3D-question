@@ -1,12 +1,12 @@
 cd image_generation
 
-CUDA_VISIBLE_DEVICES=5 \
+CUDA_VISIBLE_DEVICES=2 \
 ~/packages/blender-2.79b-linux-glibc219-x86_64/blender --background \
-    --python super_restore_render_images.py -- \
-    --start_idx 19745 \
-    --num_images 2 \
+    --python super_restore_render_images_z_direction.py -- \
+    --start_idx 0 \
+    --num_images 100 \
     --use_gpu 1 \
-    --shape_dir ../../render-3d-segmentation/CGPart \
+    --shape_dir /home/xingrui/data/CGPart \
     --model_dir data/save_models_1/ \
     --properties_json data/properties_cgpart.json \
     --margin 0.1 \
@@ -14,13 +14,13 @@ CUDA_VISIBLE_DEVICES=5 \
     --max_retries 150 \
     --width 640 \
     --height 480 \
-    --output_image_dir ../output/ver_texture_same/images/ \
-    --output_scene_dir ../output/ver_texture_same/scenes/ \
-    --output_blend_dir ../output/ver_texture_same/blendfiles \
-    --output_scene_file ../output/ver_texture_same/superCLEVR_scenes.json \
+    --output_image_dir ../output/z_direction/images/ \
+    --output_scene_dir ../output/z_direction/scenes/ \
+    --output_blend_dir ../output/z_direction/blendfiles \
+    --output_scene_file ../output/z_direction/superCLEVR_scenes.json \
     --is_part 1 \
     --load_scene 1 \
-    --clevr_scene_path ../output/ver_mask/superCLEVR_scenes.json 
+    # --clevr_scene_path ../output/ver_mask/superCLEVR_scenes.json 
 
     # --shape_color_co_dist_pth data/dist/shape_color_co_super.npz \
 
