@@ -8,6 +8,9 @@
 import json, os, math
 from collections import defaultdict
 import pdb
+import numpy as np
+import ipdb
+
 
 """
 Utilities for working with function program representations of questions.
@@ -37,11 +40,16 @@ def make_filter_handler(attribute, metadata=None, is_part=False):
         for idx in inputs[0]:
             if is_part:
                 obj_idx, part_idx = [int(a) for a in idx.split('_')]
-                part = scene_struct['objects'][obj_idx]['_parts'][part_idx]
+                try:
+                    part = scene_struct['objects'][obj_idx]['_parts'][part_idx]
+                except:
+                    ipdb.set_trace()
                 atr = part[attribute]
             else:
                 atr = scene_struct['objects'][idx][attribute]
-            if value == atr or value in atr:
+            if not isinstance(value, str):
+                ipdb.set_trace()
+            if atr is not None and (value == atr or value in atr):
                 output.append(idx)
             elif atr in metadata['_shape_hier']: # shape hier
                 if metadata['_shape_hier'][atr] == value:
@@ -113,6 +121,7 @@ def make_same_attr_handler(attribute):
 
 
 def make_query_handler(attribute, is_part=None):
+
     def query_handler(scene_struct, inputs, side_inputs):
         assert len(inputs) == 1
         assert len(side_inputs) == 0
@@ -138,6 +147,68 @@ def make_query_handler(attribute, is_part=None):
             return val
     return query_handler
 
+def query_pose_handler(scene_struct, inputs, side_inputs):
+    assert len(inputs) == 1
+    assert len(side_inputs) == 0
+    idx = inputs[0]
+    obj = scene_struct['objects'][idx]
+    assert 'pose' in obj
+    pose = obj['pose'].split('_pose')[0]
+    if pose == 'None':
+        return '__INVALID__'
+    return pose
+
+def filter_occluder_handler(scene_struct, inputs, side_inputs):
+    # output += [int(obj) for obj in scene_struct['_occlusion_relation'][token].get(str(idx), [])]
+    assert len(inputs) == 1
+    assert len(side_inputs) == 0
+    
+    output = []
+    for idx in inputs[0]:
+        if str(idx) in scene_struct['_occlusion_relation']['occluding']:
+            output.append(idx)
+    output = [int(obj_idx) for obj_idx in scene_struct['_occlusion_relation']['occluding']]
+    return output 
+
+
+def filter_occludee_handler(is_part = True):
+
+    def _partfilter_occludee_handler(scene_struct, inputs, side_inputs):
+        assert len(inputs) == 1
+        assert len(side_inputs) == 0
+        
+        output = []
+        if is_part:
+            for idx in inputs[0]:
+                if isinstance(idx, int):
+                    ipdb.set_trace()
+                obj_idx, part_idx = idx.split('_')
+                # [0] is the part name
+                if scene_struct['_occlusion'][str(obj_idx)][int(part_idx)][1] > 0:
+                    output.append(idx)
+            return output
+        else:
+            # ipdb.set_trace()
+            for obj_idx in inputs[0]:
+                if scene_struct['occlusion'][str(obj_idx)]['obj'][0] > 0 and len(scene_struct['occlusion'][str(obj_idx)]['obj']) == 4:
+                    output.append(int(obj_idx))
+            return output 
+    return _partfilter_occludee_handler           
+
+
+def query_occlusion_handler(is_part):
+
+    def _query_occlusion_handler(scene_struct, inputs, side_inputs):
+        assert len(inputs) == 1
+        assert len(side_inputs) == 0
+        obj_idx, part_idx = inputs[0].split('_')
+        if is_part:
+            occlusion = scene_struct['_occlusion'][str(obj_idx)][int(part_idx)][1] > 0
+        else:
+            occlusion = scene_struct['occlusion'][str(obj_idx)]['obj'][0] > 0
+
+        return occlusion
+    return _query_occlusion_handler
 
 def exist_handler(scene_struct, inputs, side_inputs):
     assert len(inputs) == 1
@@ -173,10 +244,26 @@ def object2part_handler(scene_struct, inputs, side_inputs):
         assert type(inputs[0]) == int
         objs = [inputs[0]]
     for obj_idx in objs:
-        part_idxs = list(scene_struct['objects'][obj_idx]['_parts'].keys())
+        object_parts = scene_struct['objects'][obj_idx]['_parts']
+        object_parts = {k:v for k, v in object_parts.items() if v['color'] is not None}
+        part_idxs = [k for k in object_parts.keys() if 'color' in object_parts[k]]
         outputs.extend([str(obj_idx)+'_'+str(part_idx) for part_idx in part_idxs])
     return outputs
         
+
+def object2part_all_handler(scene_struct, inputs, side_inputs):
+    assert len(inputs) == 1
+    assert len(side_inputs) == 0
+    outputs = []
+    if type(inputs[0]) == list:
+        objs = inputs[0]
+    else:
+        assert type(inputs[0]) == int
+        objs = [inputs[0]]
+    for obj_idx in objs:
+        part_idxs = list(scene_struct['_occlusion'][str(obj_idx)].keys())
+        outputs.extend([str(obj_idx)+'_'+str(part_idx) for part_idx in part_idxs])
+    return outputs
 
 def part2object_handler(scene_struct, inputs, side_inputs):
     assert len(inputs) == 1
@@ -193,11 +280,174 @@ def part2object_handler(scene_struct, inputs, side_inputs):
     outputs = list(outputs)
     return outputs
 
+def pose_relate(pose1, pose2, d1, d2):
+    if pose1 == 'None':
+        return "None"
+
+    diff = np.abs(d1 - d2)
+    diff = np.minimum(diff, 360 - diff)
+
+    assert diff >= 0 and diff <= 180
+    if diff < 45:
+        return 'same'
+    elif diff > 135:
+        return 'opposite'
+    else:
+        return 'vertical'
+
+
+    # if (np.abs(d1 - d2) % 360 < 45 or np.abs(d1 - d2) % 360 > 315):
+    #     return "same"
+    # elif (np.abs(d1 + 180 - d2) % 360 < 45 or np.abs(d1 + 180 - d2) % 360 > 315):
+    #     return "opposite"
+    # elif (np.abs(90 + d1 - d2) % 360 < 45 or \
+    #     np.abs(270 + d1 - d2) % 360 < 45):
+    #     return "vertical"
+    
+# def pose_relate(pose1, pose2, d1, d2):
+#     if pose1 == 'None' or pose2 == 'None':
+#         return "None"
+#     if pose1 == pose2 and (np.abs(d1 - d2) % 360 < 45 or np.abs(d1 - d2) % 360 > 315):
+#         return "same"
+#     elif (pose1, pose2) in [('left_pose', 'right_pose'),
+#                           ('right_pose', 'left_pose'),
+#                           ('front_pose', 'back_pose'),
+#                           ('back_pose', 'front_pose')] and \
+#         (np.abs(d1 + 180 - d2) % 360 < 45 or np.abs(d1 + 180 - d2) % 360 > 315):
+#         return "opposite"
+#     elif ((pose1, pose2) in [('left_pose', 'back_pose'),
+#                           ('back_pose', 'right_pose'),
+#                           ('right_pose', 'front_pose'),
+#                           ('front_pose', 'left_pose')] or \
+#         (pose2, pose1) in [('left_pose', 'back_pose'),
+#                             ('back_pose', 'right_pose'),
+#                             ('right_pose', 'front_pose'),
+#                             ('front_pose', 'left_pose')]) and \
+#         (np.abs(90 + d1 - d2) % 360 < 45 or \
+#         np.abs(270 + d1 - d2) % 360 < 45):
+#         return "vertical"
+    
+def same_pose_handler(scene_struct, inputs, side_inputs):
+    cache_key = '_same_pose'
+    if cache_key not in scene_struct:
+        cache = {}
+        for i, obj1 in enumerate(scene_struct['objects']):
+            same = []
+            for j, obj2 in enumerate(scene_struct['objects']):
+                if i != j and pose_relate(obj1['pose'] , obj2['pose'], obj1['pose_degree'] , obj2['pose_degree']) == 'same': 
+                    same.append(j)
+            cache[i] = same
+        scene_struct[cache_key] = cache
+
+    cache = scene_struct[cache_key]
+    assert len(inputs) == 1
+    assert len(side_inputs) == 0
+    return cache[inputs[0]]    
+
+
+def vertical_pose_handler(scene_struct, inputs, side_inputs):
+    cache_key = '_vertical_pose'
+    if cache_key not in scene_struct:
+        cache = {}
+        for i, obj1 in enumerate(scene_struct['objects']):
+            same = []
+            for j, obj2 in enumerate(scene_struct['objects']):
+                if i != j and pose_relate(obj1['pose'] , obj2['pose'], obj1['pose_degree'] , obj2['pose_degree']) == 'vertical': 
+                    same.append(j)
+            cache[i] = same
+        scene_struct[cache_key] = cache
+
+    cache = scene_struct[cache_key]
+    assert len(inputs) == 1
+    assert len(side_inputs) == 0
+    return cache[inputs[0]] 
+       
+def oppo_pose_handler(scene_struct, inputs, side_inputs):
+    cache_key = '_oppo_pose'
+    if cache_key not in scene_struct:
+        cache = {}
+        for i, obj1 in enumerate(scene_struct['objects']):
+            same = []
+            for j, obj2 in enumerate(scene_struct['objects']):
+                if i != j and pose_relate(obj1['pose'] , obj2['pose'], obj1['pose_degree'] , obj2['pose_degree']) == 'opposite': 
+                    same.append(j)
+            cache[i] = same
+        scene_struct[cache_key] = cache
+
+    cache = scene_struct[cache_key]
+    assert len(inputs) == 1
+    assert len(side_inputs) == 0
+    return cache[inputs[0]]    
+
+# def vertical_pose_handler(scene_struct, inputs, side_inputs):
+#     cache_key = '_oppo_pose'
+#     if cache_key not in scene_struct:
+#         cache = {}
+#         for i, obj1 in enumerate(scene_struct['objects']):
+#             same = []
+#             for j, obj2 in enumerate(scene_struct['objects']):
+#                 if i != j and (np.abs(90 + obj1['pose_degree'] - obj2['pose_degree']) % 360 < 30 or \
+#                              np.abs(270 + obj1['pose_degree'] - obj2['pose_degree']) % 360 < 30): 
+#                     same.append(j)
+#             cache[i] = same
+#         scene_struct[cache_key] = cache
+
+#     cache = scene_struct[cache_key]
+#     assert len(inputs) == 1
+#     assert len(side_inputs) == 0
+#     return cache[inputs[0]]    
+
+def process_pose(rotation):
+    if isinstance(rotation, str):
+        return rotation
+    if rotation >= 0 and rotation < 30:
+        pose = 'back_pose'            
+    elif rotation > 60 and rotation <= 120:
+        pose = 'right_pose' 
+    elif rotation > 150 and rotation <= 210:
+        pose = 'front_pose'
+    elif rotation > 240 and rotation <= 300:
+        pose = 'left_pose'        
+    elif rotation > 330:
+        pose = 'back_pose'   
+    else:
+        pose = 'None'       
+    return pose
+
+def relate_occlusion_handler(token='part_occluded'):
+    def _relate_occlusion_handler(scene_struct, inputs, side_inputs):
+        assert len(inputs) == 1
+        assert len(side_inputs) == 0
+        output = []
+        # print(inputs[0])
+        if token != 'part_occluding':
+            idx = inputs[0]
+            output += [int(obj) for obj in scene_struct['_occlusion_relation'][token].get(str(idx), [])]
+        else:
+            idx = inputs[0]
+            output += [obj for obj in scene_struct['_occlusion_relation'][token].get(str(idx), [])]
+        return output
+    return _relate_occlusion_handler
+
+def filter_pose_handler(scene_struct, inputs, side_inputs):
+    # print("filter pose")
+    # ipdb.set_trace()
+
+    value = side_inputs[0]
+    # value = side_inputs[0]
+    output = []
+    for idx in inputs[0]:
+        # rotation = scene_struct['objects'][idx]['rotation']
+        pose = scene_struct['objects'][idx]['pose']    
+        if value == pose:
+            output.append(idx)         
+    return output
 # Register all of the answering handlers here.
 # TODO maybe this would be cleaner with a function decorator that takes
 # care of registration? Not sure. Also what if we want to reuse the same engine
 # for different sets of node types?
 def make_excetue_handlers(key, metadata=None):
+    # print(key)
     execute_handlers = {
         'scene': scene_handler,
         'filter_color': make_filter_handler('color', metadata=metadata),
@@ -235,8 +485,24 @@ def make_excetue_handlers(key, metadata=None):
         'same_shape': make_same_attr_handler('shape'),
         'same_size': make_same_attr_handler('size'),
         'same_material': make_same_attr_handler('material'),
+        'same_pose': same_pose_handler,
+        'opposite_pose': oppo_pose_handler,
+        'vertical_pose': vertical_pose_handler,
         'object2part': object2part_handler,
-        'part2object': part2object_handler
+        'object2part_all': object2part_all_handler,
+        'part2object': part2object_handler,
+        'query_pose' : query_pose_handler,
+        'filter_pose' :filter_pose_handler,
+        'partfilter_occludee': filter_occludee_handler(is_part=True),
+        'filter_occludee': filter_occludee_handler(is_part=False),
+        'filter_occluder': filter_occluder_handler,
+        'partquery_occlusion': query_occlusion_handler(is_part=True),
+        # occlusion relationship
+        'relate_occluding': relate_occlusion_handler(token='occluding'),
+        'relate_occluded': relate_occlusion_handler(token='occluded'),
+        'relate_occluding_part': relate_occlusion_handler(token='part_occluding'),
+        'relate_part_occluded': relate_occlusion_handler(token='part_occluded'),
+
     }
     return execute_handlers[key]
 
@@ -255,6 +521,7 @@ def answer_question(question, metadata, scene_struct, all_outputs=False,
     all_input_types, all_output_types = [], []
     node_outputs = []
     for node in question['nodes']:
+        # print('answer question', node)
         if cache_outputs and '_output' in node:
             node_output = node['_output']
         else:
@@ -263,6 +530,7 @@ def answer_question(question, metadata, scene_struct, all_outputs=False,
             # assert node_type in execute_handlers, msg
             # handler = execute_handlers[node_type]
             handler = make_excetue_handlers(node_type, metadata)
+            
             node_inputs = [node_outputs[idx] for idx in node['inputs']]
             side_inputs = node.get('side_inputs', [])
             node_output = handler(scene_struct, node_inputs, side_inputs)
@@ -341,7 +609,7 @@ def is_degenerate(question, metadata, scene_struct, answer=None, verbose=False):
                     name = n['type']
                     if 'side_inputs' in n:
                         name = '%s[%s]' % (name, n['side_inputs'][0])
-                    print(i, name, n['_output'])
+                    # print(i, name, n['_output'])
                 print('new answer is: ', new_answer)
 
             if new_answer == answer:

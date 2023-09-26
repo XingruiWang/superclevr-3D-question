@@ -1,4 +1,8 @@
-# CLEVR Dataset Generation
+# SuperCLEVR-3D Dataset Generation
+
+# Image Generation
+
+The procedure of image generation is in `scripts/render_images_3D.sh`
 
 
 # Computer the occlusion relationship

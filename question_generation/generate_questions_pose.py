@@ -11,9 +11,7 @@ import time
 import re
 import pdb
 import copy
-from pprint import pprint
 import numpy as np
-from sqlalchemy import null 
 import ipdb
 from tqdm import tqdm
 import question_engine as qeng
@@ -97,11 +95,13 @@ parser.add_argument('--time_dfs', action='store_true',
         help="Time each depth-first search; must be given with --verbose")
 parser.add_argument('--profile', action='store_true',
         help="If given then run inside cProfile")
+parser.add_argument('--contain_pose', action='store_true',
+        help="If given then run inside cProfile")
+
 # args = parser.parse_args()
 
 def precompute_occlusion_relation(scene_struct, metadata):
     # part_occluded: all the object by which this part is occluded
-    # part_occluding: all the object which this object is occluding
     occlusion_relation = {'part_occluded':{}, 'occluded' : {}, 'occluding':{}, 'part_occluding':{}}
     
     for obj_id, name_occlusion in scene_struct['occlusion'].items():
@@ -128,12 +128,13 @@ def precompute_filter_options(scene_struct, metadata, remove_redundant=False):
     # and values are lists of object idxs that match the filter criterion
     attribute_map = {}
 
-    if metadata['dataset'] == 'CLEVR-v1.0':
-        # modification 1
+    # if metadata['dataset'] == 'CLEVR-v1.0':
+    # modification 1
+    if args.contain_pose:
         attr_keys = ['pose', 'size', 'color', 'material', 'shape']
-        # attr_keys = ['size', 'color', 'material', 'shape']
     else:
-        assert False, 'Unrecognized dataset'
+        attr_keys = ['size', 'color', 'material', 'shape']
+
 
     # Precompute masks: len of 16, ie. 16*[0,1,1,0]s
     masks = []
@@ -145,8 +146,7 @@ def precompute_filter_options(scene_struct, metadata, remove_redundant=False):
 
     for object_idx, obj in enumerate(scene_struct['objects']):
 
-        if metadata['dataset'] == 'CLEVR-v1.0':
-            keys = [tuple(obj[k] for k in attr_keys) ]
+        keys = [tuple(obj[k] for k in attr_keys) ]
 
         for mask in masks:
             for key in keys:
@@ -172,8 +172,10 @@ def precompute_filter_options(scene_struct, metadata, remove_redundant=False):
                 if masked_key[-1] is not None:
                     hypershape = metadata['_shape_hier'][masked_key[-1]]
                     # modification 2
-                    masked_key = (masked_key[0], masked_key[1], masked_key[2], masked_key[3], hypershape)
-                    # masked_key = (masked_key[0], masked_key[1], masked_key[2], hypershape)
+                    if args.contain_pose:
+                        masked_key = (masked_key[0], masked_key[1], masked_key[2], masked_key[3], hypershape)
+                    else:
+                        masked_key = (masked_key[0], masked_key[1], masked_key[2], hypershape)
                     if masked_key not in attribute_map:
                         attribute_map[masked_key] = set()
                     attribute_map[masked_key].add(object_idx)
@@ -293,10 +295,7 @@ def precompute_partfilter_options(scene_struct, metadata, obj_idx, remove_redund
     '''
     attribute_map = {}
 
-    if metadata['dataset'] == 'CLEVR-v1.0':
-        attr_keys = ['size', 'color', 'material', 'partname']
-    else:
-        assert False, 'Unrecognized dataset'
+    attr_keys = ['size', 'color', 'material', 'partname']
 
     # Precompute masks: len of 16, ie. 16*[0,1,1,0]s
     masks = []
@@ -480,11 +479,7 @@ def find_filter_options(object_idxs, scene_struct, metadata, remove_redundant=0.
 def add_empty_filter_options(attribute_map, metadata, num_to_add):
     # Add some filtering criterion that do NOT correspond to objects
 
-    if metadata['dataset'] == 'CLEVR-v1.0':
-        attr_keys = ['Size', 'Color', 'Material', 'Shape']
-        # attr_keys = ['Size', 'Color', 'Shape']
-    else:
-        assert False, 'Unrecognized dataset'
+    attr_keys = ['Size', 'Color', 'Material', 'Shape']
     
     attr_vals = [metadata['types'][t] + [None] for t in attr_keys]
     if '_filter_options' in metadata:
@@ -946,9 +941,9 @@ def instantiate_templates_dfs(scene_struct,
                         cur_next_vals[param_name] = param_val
                         next_input = len(state['nodes']) + len(new_nodes) - 1
                     elif param_val is None:                                
-                        if metadata['dataset'] == 'CLEVR-v1.0' and param_type == 'Shape':
+                        if param_type == 'Shape':
                             param_val = 'thing'
-                        elif metadata['dataset'] == 'CLEVR-v1.0' and param_type == 'Partname':
+                        elif param_type == 'Partname':
                             param_val = 'part'
                         else:
                             param_val = ''
@@ -1351,8 +1346,7 @@ def main(args):
     with open(args.metadata_file, 'r') as f:
         metadata = json.load(f)
         dataset = metadata['dataset']
-        if dataset != 'CLEVR-v1.0':
-            raise ValueError('Unrecognized dataset "%s"' % dataset)
+
     
     functions_by_name = {}
     for f in metadata['functions']:
@@ -1403,8 +1397,7 @@ def main(args):
             if final_dtype == 'Bool':
                 answers = [True, False]
             if final_dtype == 'Integer':
-                if metadata['dataset'] == 'CLEVR-v1.0':
-                    answers = list(range(0, 11))
+                answers = list(range(0, 11))
             template_answer_counts[key[:2]] = {}
             for a in answers:
                 template_answer_counts[key[:2]][a] = 0

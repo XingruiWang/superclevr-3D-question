@@ -12,7 +12,7 @@
       "gray", "red", "blue", "green", "brown", "purple", "cyan", "yellow"
     ],
     "Relation": [
-      "left", "right", "behind", "front"
+      "left", "right", "behind", "front", "above", "below"
     ],
     "Size": [
       "small", "large"
@@ -110,6 +110,14 @@
       "name": "query_material",
       "inputs": ["Object"],
       "output": "Material",
+      "terminal": true
+    },
+    {
+      "name": "query_distance",
+      "inputs": [
+        "Object"
+      ],
+      "output": "Integer",
       "terminal": true
     },
     {
@@ -253,6 +261,30 @@
       "output": "Bool",
       "terminal": false,
       "template_only": true
+    },
+    {
+      "name": "same_pose",
+      "inputs": [
+        "Object"
+      ],
+      "output": "ObjectSet",
+      "terminal": false
+    },
+    {
+      "name": "opposite_pose",
+      "inputs": [
+        "Object"
+      ],
+      "output": "ObjectSet",
+      "terminal": false
+    },
+    {
+      "name": "vertical_pose",
+      "inputs": [
+        "Object"
+      ],
+      "output": "ObjectSet",
+      "terminal": false
     }
   ]
 }

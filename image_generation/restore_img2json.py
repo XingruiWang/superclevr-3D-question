@@ -171,4 +171,8 @@ def main(idx):
     
     os.system('rm {} {}'.format(img_path, json_pth))
 
-main(int(sys.argv[1]))
+idx = sys.argv[1]
+if '_' in idx:
+    main(idx)
+else:
+    main(int(idx))

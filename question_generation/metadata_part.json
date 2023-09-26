@@ -1,10 +1,16 @@
 {
-  "dataset": "CLEVR-v1.0",
+  "dataset": "superCLEVR-3D-v1.0",
   "types": {
     "Object": null,
     "ObjectSet": null,
     "Integer": null,
     "Bool": null,
+    "Pose": [
+      "front",
+      "back",
+      "left",
+      "right"
+    ],
     "Shape": {
       "car": ["suv", "wagon", "minivan", "sedan", "truck", "addi"],
       "bus": ["articulated", "regular", "double", "school"],
@@ -16,7 +22,7 @@
       "gray", "red", "blue", "green", "brown", "purple", "cyan", "yellow"
     ],
     "Relation": [
-      "left", "right", "behind", "front"
+      "left", "right", "behind", "front", "above", "below"
     ],
     "Size": [
       "small", "large"
@@ -72,6 +78,16 @@
       "terminal": false,
       "template_only": false
     },
+    {
+      "name": "object2part_all",
+      "inputs": [
+        "ObjectSet"
+      ],
+      "output": "PartSet",
+      "terminal": false,
+      "template_only": false
+    },
+    
     {
       "name": "scene",
       "inputs": [],
@@ -378,6 +394,38 @@
       "output": "Bool",
       "terminal": false,
       "template_only": true
+    },
+    {
+      "name": "same_pose",
+      "inputs": [
+        "Object"
+      ],
+      "output": "ObjectSet",
+      "terminal": false
+    },
+    {
+      "name": "opposite_pose",
+      "inputs": [
+        "Object"
+      ],
+      "output": "ObjectSet",
+      "terminal": false
+    },
+    {
+      "name": "vertical_pose",
+      "inputs": [
+        "Object"
+      ],
+      "output": "ObjectSet",
+      "terminal": false
+    },
+    {
+      "name": "query_pose",
+      "inputs": [
+        "Object"
+      ],
+      "output": "Pose",
+      "terminal": true
     }
   ]
 }

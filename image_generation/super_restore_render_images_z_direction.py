@@ -344,6 +344,19 @@ def render_scene(args,
     scene_struct['directions']['above'] = tuple(plane_up)
     scene_struct['directions']['below'] = tuple(-plane_up)
 
+    # add camera 
+    mat = camera.matrix_world
+    scene_struct['matrix_world'] = [list(mat[0]), list(mat[1]), list(mat[2]), list(mat[3])]
+
+    mat = camera.matrix_world.inverted()
+    scene_struct['matrix_world_inverted'] = [list(mat[0]), list(mat[1]), list(mat[2]), list(mat[3])]
+
+    mat = camera.calc_matrix_camera(render_args.resolution_x, render_args.resolution_y, render_args.pixel_aspect_x, render_args.pixel_aspect_y)
+    scene_struct['projection_matrix'] = [list(mat[0]), list(mat[1]), list(mat[2]), list(mat[3])]
+    
+    
+    scene_struct['camera_location'] = tuple(camera.location)
+
     # Add random jitter to lamp positions
     if args.key_light_jitter > 0:
         for i in range(3):
@@ -499,9 +512,6 @@ def render_scene(args,
     json.dump(mat_indices, open(json_pth, 'w'))
     part_colors = build_rendermask_graph(mat_indices)
 
-
-
-
     # Render the scene and dump the scene data structure
     scene_struct['objects'] = objects
     scene_struct['relationships'] = compute_all_relationships(scene_struct)
@@ -563,6 +573,7 @@ def add_random_objects(scene_struct, num_objects, args, camera, idx=-1):
             size_name = sf['size']
             r = {a[0]: a[1] for a in size_mapping}[size_name]
             x, y, z = sf['3d_coords'][:3]
+            h = sf['height']
         else:
             # Choose a random size
             # size_name, r = random.choice(size_mapping)
@@ -604,7 +615,12 @@ def add_random_objects(scene_struct, num_objects, args, camera, idx=-1):
                     print('placing obj ', i)
                     x = random.uniform(-3, 3)
                     y = random.uniform(-3, 3)
-                    h = int(random.uniform(0, 2.999))
+                    # h = int(random.uniform(0, 2.999))
+                    if obj_name in ["jet","fighter","biplane","airliner"]:
+
+                        h = random.choice([0, 2])
+                    else:
+                        h = 0
                     # Choose random orientation for the object.
                     theta = 360.0 * random.random()
                 
@@ -675,7 +691,8 @@ def add_random_objects(scene_struct, num_objects, args, camera, idx=-1):
             mat_name = {a[1]: a[0] for a in material_mapping}[mat_name_out]
             color_name = sf['color']
             rgba = color_name_to_rgba[color_name]
-            texture = sf.get('texture', random.choice(textures_mapping))
+            # texture = sf.get('texture', random.choice(textures_mapping))
+            texture = None
         else:
             if mat_dist is None:
                 mat_name, mat_name_out = random.choice(material_mapping)
@@ -692,7 +709,8 @@ def add_random_objects(scene_struct, num_objects, args, camera, idx=-1):
             else:
                 color_name = np.random.choice(color_dist['names'], p=color_dist['dist'])
                 rgba = color_name_to_rgba[color_name]
-            texture = random.choice(textures_mapping)
+            # texture = random.choice(textures_mapping)
+            texture = None
         mat_freq = {"large":60, "small":30}[size_name]
         if texture=='checkered':
             mat_freq = mat_freq / 2
@@ -710,6 +728,7 @@ def add_random_objects(scene_struct, num_objects, args, camera, idx=-1):
             'rotation': theta,
             'height': h,
             'pixel_coords': pixel_coords,
+            'distance':pixel_coords[0][2],
             'color': color_name,
             'material': mat_name_out,
             'texture': texture
@@ -717,7 +736,7 @@ def add_random_objects(scene_struct, num_objects, args, camera, idx=-1):
         
         obj_pointer.append(current_obj)
 
-        if idx >= 0 and args.load_scene and args.is_part:
+        if idx >= 0 and args.load_scene and args.is_part:            
             part_record = cob[i]['parts']
             for part_name in part_record:
                 part_verts_idxs = obj_info['info_part_labels'][obj_name][part_name]
@@ -729,6 +748,7 @@ def add_random_objects(scene_struct, num_objects, args, camera, idx=-1):
                     part_texture = part_record[part_name]['texture']
                 else:
                     part_texture = random.choice(textures_mapping)
+                part_texture = None
                 mat_freq = {"large":60, "small":30}[size_name]
                 if texture=='checkered':
                     mat_freq = mat_freq / 2
@@ -776,6 +796,7 @@ def add_random_objects(scene_struct, num_objects, args, camera, idx=-1):
                 part_verts_idxs = obj_info['info_part_labels'][obj_name][part_name]
                 mat_name, mat_name_out = random.choice(material_mapping)
                 texture = random.choice(textures_mapping)
+                texture = None
                 mat_freq = {"large":60, "small":30}[size_name]
                 if texture=='checkered':
                     mat_freq = mat_freq / 2
@@ -789,7 +810,7 @@ def add_random_objects(scene_struct, num_objects, args, camera, idx=-1):
                         "texture": texture
                         }
                 
-        objects[i]['parts'] = part_record
+            objects[i]['parts'] = part_record
 
     return objects, blender_objects
 
@@ -805,14 +826,17 @@ def compute_all_relationships(scene_struct, eps=0.2):
     """
     all_relationships = {}
     for name, direction_vec in scene_struct['directions'].items():
-        if name == 'above' or name == 'below': continue
+        if name in ['left', 'right', 'front', 'behind']: continue
+        # if name == 'above' or name == 'below': continue
         all_relationships[name] = []
         for i, obj1 in enumerate(scene_struct['objects']):
-            coords1 = obj1['3d_coords']
+            # coords1 = obj1['3d_coords']
+            coords1 = (obj1['3d_coords'][0], obj1['3d_coords'][1], obj1['height'])
             related = set()
             for j, obj2 in enumerate(scene_struct['objects']):
                 if obj1 == obj2: continue
-                coords2 = obj2['3d_coords']
+                # coords2 = obj2['3d_coords']
+                coords2 = (obj2['3d_coords'][0], obj2['3d_coords'][1], obj2['height'])
                 diff = [coords2[k] - coords1[k] for k in [0, 1, 2]]
                 dot = sum(diff[k] * direction_vec[k] for k in [0, 1, 2])
                 if dot > eps:
