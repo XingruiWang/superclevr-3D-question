@@ -11,8 +11,6 @@ The original SuperCLEVR dataset doesn't record the occlusion part of each object
 
 1. Split the scene file
 
-
-
 ## Notes for super-CLEVR
 
 1. To generate pose questions

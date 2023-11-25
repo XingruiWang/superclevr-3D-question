@@ -3,6 +3,4 @@ __pycache__/
 *.swp
 *.pyc
 output/
-data/
-real_images/
-distribution.ipynb
+
