@@ -83,7 +83,7 @@ parser.add_argument('--instances_per_template', default=1, type=int,
 parser.add_argument('--est_question_per_image', default=1, type=int,
         help="The number of times each template should be instantiated on an image")
 # Misc
-parser.add_argument("--remove_redundant", type = float, default = 0.0, 
+parser.add_argument("--remove_redundant", type = float, default = 1.0, 
         help="-1.0 ~ +1.0. Filter out (>0) or add (<0) redundant filters in the question generation prodecure. Will filter out with probability, default is 0, no filtering.")
 parser.add_argument('--reset_counts_every', default=250, type=int,
         help="How often to reset template and answer counts. Higher values will " +

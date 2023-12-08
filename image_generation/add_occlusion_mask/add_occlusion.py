@@ -6,6 +6,11 @@ import cv2
 import copy
 import ipdb
 from tqdm import tqdm
+import logging
+
+# Configure logging
+logging.basicConfig(filename='generation-log.txt', level=logging.INFO)
+
 
 def process_pose(rotation):
     if isinstance(rotation, str):
@@ -141,6 +146,7 @@ def compute_occlusion(scene, obj, obj_index):
                 f.write(f"{scene['image_filename']}, {obj_index}, {part_name}\n")
             print(f"{scene['image_filename']}, {obj_index}, {part_name}")
             occluded = 2
+            mask_before =  str_to_biimg(mask[1])
             mask_occlusion = mask_before
             visible_before = False if np.sum(mask_before) < 20 else True
 
@@ -230,7 +236,7 @@ if __name__ == '__main__':
     scene = {}
 
     # idx = 19999-1
-    idx = -1
+    idx = 3653
 
     read_scene_dict = {}
 
@@ -241,8 +247,8 @@ if __name__ == '__main__':
 
     sorted_list = sorted(os.listdir(args.splitted_scene))
     # for scene_file in tqdm(sorted_list[130081:]):
-    for scene_file in tqdm(sorted_list[:]):
-
+    for i, scene_file in enumerate(tqdm(sorted_list[23964:])):
+        logging.info(scene_file + '\t' + str(idx) +'\t' + str(i))
         if len(scene_file.split("_")) < 4:
             continue
 
@@ -253,12 +259,13 @@ if __name__ == '__main__':
         if ori_idx != ori_scene_name:
             
             if ori_idx != '':
-                compute_occlusion_relationship(scene)
-                scene_with_occlusion = add_pose(scene)
-                new_scene['scenes'].append(scene_with_occlusion)
+                if not os.path.exists(os.path.join(args.scenes_with_occlusion, f'scene_occlusion_{idx:06d}.json')):
+                    compute_occlusion_relationship(scene)
+                    scene_with_occlusion = add_pose(scene)
+                    new_scene['scenes'].append(scene_with_occlusion)
 
-                with open(os.path.join(args.scenes_with_occlusion, f'scene_occlusion_{idx:06d}.json'), 'w') as ww:
-                    json.dump(scene_with_occlusion, ww)
+                    with open(os.path.join(args.scenes_with_occlusion, f'scene_occlusion_{idx:06d}.json'), 'w') as ww:
+                        json.dump(scene_with_occlusion, ww)
             idx += 1     
             if idx % 200 == 0:
                 print(f"To index {idx}")
@@ -277,7 +284,8 @@ if __name__ == '__main__':
         image_index = obj['image_index']
         img_index, obj_index = image_index.split("_")
 
-        scene['occlusion'][obj_index] = compute_occlusion(scene, obj, obj_index)
+        if not os.path.exists(os.path.join(args.scenes_with_occlusion, f'scene_occlusion_{idx:06d}.json')):
+            scene['occlusion'][obj_index] = compute_occlusion(scene, obj, obj_index)
         
 print(f"Generate {idx} scenes")
 with open(args.output_scene_file, 'w') as f:
