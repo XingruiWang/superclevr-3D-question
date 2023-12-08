@@ -2,7 +2,8 @@
 
 The implementation of Super-CLEVR-3D dataset. This dataset is published in NeurIPS 2023 paper [3D-Aware Visual Question Answering about Parts, Poses and Occlusions](https://arxiv.org/abs/2310.17914). The implementaion of model is in [3D-Aware-VQA](https://github.com/XingruiWang/3D-Aware-VQA). 
 
-The code is still updating, and the dataset download link is coming soon.
+<span style="color:blue">The code is still updating, and the dataset download link is coming soon.</span>.
+
 
 # Image Generation
 
