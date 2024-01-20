@@ -4,11 +4,13 @@ The implementation of Super-CLEVR-3D dataset. This dataset is published in NeurI
 
 <span style="color:blue">The code is still updating, and the dataset download link is coming soon.</span>.
 
-# Download Link
+# How to Download
 
-- Images \[[download](https://www.cs.jhu.edu/~xwang378/share/Super-CLEVR-3D/images.zip)\]. There are 30k images in total. The first 20k are used for training, then 5k for validation and 5k for testing.
-
-
+| Name   | Download Link | Description                                                        |                                            
+|--------|---------------------------|--------------------------------------------------------------------|
+| Images |  [images.zip](https://www.cs.jhu.edu/~xwang378/share/Super-CLEVR-3D/images.zip) | There are 30k images in total. The first 20k are used for training, then 5k for validation and 5k for testing. |
+| Annotations |  [scenes.json](./) | The corresponding annotation for each objects.|
+| Questions | [questions.zip](./) |  |
 
 # How to generate data by yourself
 
@@ -37,9 +39,6 @@ python generate_questions_pose.py \
    --output_questions_file ../output/superclevr_questions_pose_no_red_2.json \
    --template_dir super_clevr_pose \
    --remove_redundant 1.0 \
-
-cd..
-
 ```
 2. Occlusion questions
 
@@ -57,6 +56,5 @@ python generate_questions.py \
    --output_questions_file ../output/superclevr_questions_occlusion_210k.json \
    --template_dir super_clevr_occlusion_new \
    --remove_redundant 1.0
-
 ```
 Set `template_dir=super_clevr_occlusion_new` if generating occlusion questions with parts; Set `template_dir=super_clevr_object_occlusion` if generating occlusion questions without parts; 
