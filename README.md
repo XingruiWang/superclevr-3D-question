@@ -4,16 +4,24 @@ The implementation of Super-CLEVR-3D dataset. This dataset is published in NeurI
 
 <span style="color:blue">The code is still updating, and the dataset download link is coming soon.</span>.
 
+# Download Link
 
-# Image Generation
-
-The procedure of image generation is in `scripts/render_images_3D.sh`. Please read this documentation for more instructions.
-
+- Images \[[download](https://www.cs.jhu.edu/~xwang378/share/Super-CLEVR-3D/images.zip)\]. There are 30k images in total. The first 20k are used for training, then 5k for validation and 5k for testing.
 
 
-## 3D-Aware Question Generation
 
-1. To generate pose questions
+# How to generate data by yourself
+
+## 1. Generate Images and Scene Annotations
+
+The scripts for image generation is in `scripts/render_images_3D.sh`. Please read this [documentation](https://github.com/XingruiWang/superclevr-3D-question/blob/main/image_generation/README.md) for more instructions.
+
+
+## 2. Generate Questions
+
+As introduced in the paper, we include three types of questions: pose, parts and occlusion.
+
+1. Pose questions
 
 ```
 cd question_generation
@@ -33,7 +41,7 @@ python generate_questions_pose.py \
 cd..
 
 ```
-2. To generate occlusion 
+2. Occlusion questions
 
 ```
 cd question_generation
