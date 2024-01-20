@@ -3,14 +3,14 @@
 The image of Super-CLEVR-3D are using the same setting of [Super-CLEVR](https://github.com/Lizw14/Super-CLEVR/tree/main/image_generation). But the original Super-CLEVR dataset doesn't record the occlusion part of each object, which will be uilizied to generate occlusion question.
 So we need to re-render the objects from the scene one-by-one and then computer the mask of occluded / visible part of each object.
 
-If you want to generate the image yourself, you can run the `` directly as all required procedures are in this script. This file contains four steps
+If you want to generate the image yourself, you can run `scripts/render_images_3D.sh` at the root directory. In detail, the generation contains four steps.
 
 ### 1. Rerender Superclevr image.
-This is the same image generation process as [Super-CLEVR](https://github.com/Lizw14/Super-CLEVR/tree/main/image_generation), which you should first setup the enviroment following according to their instructions.
-
-**We add the camera parameters into the annotation files, as they are randomly assigned in each scene.**
+This is the same image generation process as [Super-CLEVR](https://github.com/Lizw14/Super-CLEVR/tree/main/image_generation), which you should first setup the environment following according to their instructions. Although the setting is the same, **we re-render to add the camera parameters into the annotation files, as they are randomly assigned in each scene.**
 
 ```
+cd image_generation
+
 # 1.rerender Superclevr image, add the camera attributions
 /your/path/to/blender --background \
     --python super_restore_render_images.py --\
@@ -34,8 +34,7 @@ This is the same image generation process as [Super-CLEVR](https://github.com/Li
 
 ### 2. Split the scene file.
 
-In order the re-render the each object one by one and compute their occlusions in the future, 
-here we need to create the scene files fro each of them, so they can be rendered witht the same image generation code.
+In order to add occlusion relationship into the annotations, we will re-render the each object one by one and compute their occlusions in the future. Here we need to create the scene files for each of them, to render them independently in the scene.
 
 ```
 python add_occlusion_mask/split_scenes.py \
@@ -46,7 +45,6 @@ python add_occlusion_mask/split_scenes.py \
 ### 3. Render each objects.
 
 ```
-# 3. generate splitted scene
 /your/path/to/blender --background \
     --python super_restore_render_images_split.py -- \
     --start_idx 50000 \
@@ -72,7 +70,6 @@ python add_occlusion_mask/split_scenes.py \
 ### 4. Compute the occlusion area and add them to the annotation files.
 
 ```
-# 4.
 python add_occlusion_mask/add_occlusion.py \
     --splitted_scene /home/xingrui/publish/3D-Aware-VQA/superclevr-3D-question/output/ver_mask_30k_copy/scenes-split \
     --scenes_with_occlusion /home/xingrui/publish/3D-Aware-VQA/superclevr-3D-question/output/ver_mask_30k_copy/scenes_with_occlusion \
