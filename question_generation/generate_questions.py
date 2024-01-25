@@ -80,7 +80,7 @@ parser.add_argument('--templates_per_image', default=10, type=int,
                  "on each image")
 parser.add_argument('--instances_per_template', default=1, type=int,
         help="The number of times each template should be instantiated on an image")
-parser.add_argument('--est_question_per_image', default=1, type=int,
+parser.add_argument('--est_question_per_image', default=10, type=int,
         help="The number of times each template should be instantiated on an image")
 # Misc
 parser.add_argument("--remove_redundant", type = float, default = 1.0, 
@@ -1498,12 +1498,12 @@ def main(args):
 
             # here, e.g. est_question_per_image = 10:
             # it will ensure, if avg < 9, will use more template on the images after, and num_instantiated <= 12, 
-            # if num_instantiated >= args.templates_per_image and question_count / (i+1) > (args.est_question_per_image - 0.5):
-            #     break
-            # if num_instantiated >= args.est_question_per_image + 1:
-            #     break
-            # if question_count / (i+1) > args.est_question_per_image:
-            #     break   
+            if num_instantiated >= args.templates_per_image and question_count / (i+1) > (args.est_question_per_image - 0.5):
+                break
+            if num_instantiated >= args.est_question_per_image + 1:
+                break
+            if question_count / (i+1) > args.est_question_per_image:
+                break   
             if num_instantiated >= args.templates_per_image * args.instances_per_template :
                 break
     # Change "side_inputs" to "value_inputs" in all functions of all functional

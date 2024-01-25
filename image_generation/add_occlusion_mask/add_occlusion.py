@@ -202,94 +202,166 @@ def compute_occlusion_relationship(scene):
         for name in name_to_drop:
             if name != 'obj':
                 scene['occlusion'][obj_id].pop(name, None)
-    
+
+
 if __name__ == '__main__':
-    import pdb
     import argparse
-    
     
     parser = argparse.ArgumentParser()
     parser.add_argument('--splitted_scene', default='/home/xingrui/publish/superclevr_3D_questions/output/ver_mask_10/scenes-split', help='# function')
-    parser.add_argument('--scenes_with_occlusion', default='/home/xingrui/publish/superclevr_3D_questions/output/ver_mask_10/scenes_with_occlusion', help='# function')
+    parser.add_argument('--output_scenes_dir', default='/home/xingrui/publish/superclevr_3D_questions/output/ver_mask_10/scenes_with_occlusion', help='# function')
     parser.add_argument('--output_scene_file', default='/home/xingrui/publish/superclevr_3D_questions/output/ver_mask_10/superCLEVR_scenes_occlusion.json', help='# function')
     parser.add_argument('--original_super_clevr_scene', default='/home/xingrui/publish/superclevr_3D_questions/output/ver_mask_10/superCLEVR_scenes.json', help='# function')
+    
     args = parser.parse_args()
 
-    # new_dir = "/home/xingrui/publish/superclevr_3D_questions/output/ver_mask_new/scenes-split"
-    # new_dir_occlusion = "/home/xingrui/publish/superclevr_3D_questions/output/ver_mask_new/scenes_with_occlusion"
-    # output_scene_file = "/home/xingrui/publish/superclevr_3D_questions/output/ver_mask_new/superCLEVR_scenes_210k_occlusion_stricker_0412.json"
 
-    # original_super_clevr_scene = "/home/xingrui/publish/superclevr_3D_questions/output/ver_mask_new/superCLEVR_scenes_210k.json"
-    # original_super_clevr_scene = "/home/xingrui/vqa/super-clevr-gen/output/ver_mask_new/superCLEVR_scenes_occlusion.json"
-
-    if not os.path.exists(args.scenes_with_occlusion):
-        os.makedirs(args.scenes_with_occlusion, exist_ok=True)
+    if not os.path.exists(args.output_scenes_dir):
+        os.makedirs(args.output_scenes_dir, exist_ok=True)
+    
+    # start the new scene file
     with open(args.original_super_clevr_scene, 'r') as f:
         new_scene = json.load(f)
-    
+        
+    # save a copy of the original scene file
     ori_scenes = copy.deepcopy(new_scene['scenes'][:])
-    
+    scene_id_map = {int(s['image_index']): i for i, s in enumerate(ori_scenes)} 
+        
     new_scene['scenes'] = []
+    
+    for scene_name in sorted(os.listdir(args.splitted_scene)):
+        # all folders
 
-    find_new = False
-    ori_idx = ''
-    scene = {}
+        image_index = int(scene_name.split("_")[-1])
+        idx = scene_id_map[image_index]
+        scene = ori_scenes[idx]
+        scene['occlusion'] = {}
+        ori_scene_name = scene_name
 
-    # idx = 19999-1
-    idx = 3653
+        for scene_obj_name in sorted(os.listdir(os.path.join(args.splitted_scene, scene_name))):
+            # all objects
+            with open(os.path.join(args.splitted_scene, scene_name, scene_obj_name)) as f:
+                obj = json.load(f)
 
-    read_scene_dict = {}
+            image_index = obj['image_index']
+            img_index, obj_index = image_index.split("_")
 
-    for scene_file in tqdm(sorted(os.listdir(args.splitted_scene))):
-        with open(os.path.join(args.splitted_scene, scene_file)) as f:
-            obj = json.load(f)
-        read_scene_dict[scene_file] = obj
-
-    sorted_list = sorted(os.listdir(args.splitted_scene))
-    # for scene_file in tqdm(sorted_list[130081:]):
-    for i, scene_file in enumerate(tqdm(sorted_list[23964:])):
-        logging.info(scene_file + '\t' + str(idx) +'\t' + str(i))
-        if len(scene_file.split("_")) < 4:
-            continue
-
-        obj = read_scene_dict[scene_file]
-        
-        ori_scene_name = "_".join(scene_file.split("_")[:-1])
-        
-        if ori_idx != ori_scene_name:
-            
-            if ori_idx != '':
-                if not os.path.exists(os.path.join(args.scenes_with_occlusion, f'scene_occlusion_{idx:06d}.json')):
-                    compute_occlusion_relationship(scene)
-                    scene_with_occlusion = add_pose(scene)
-                    new_scene['scenes'].append(scene_with_occlusion)
-
-                    with open(os.path.join(args.scenes_with_occlusion, f'scene_occlusion_{idx:06d}.json'), 'w') as ww:
-                        json.dump(scene_with_occlusion, ww)
-            idx += 1     
-            if idx % 200 == 0:
-                print(f"To index {idx}")
-
-            if idx >= len(ori_scenes):
-            # if idx >= len(ori_scenes) or idx > 2:
-                break
-            scene = ori_scenes[idx]
-            scene['occlusion'] = {}
-
-            ori_idx = ori_scene_name
-            find_new = True
-        else:
-            find_new = False
-
-        image_index = obj['image_index']
-        img_index, obj_index = image_index.split("_")
-
-        if not os.path.exists(os.path.join(args.scenes_with_occlusion, f'scene_occlusion_{idx:06d}.json')):
             scene['occlusion'][obj_index] = compute_occlusion(scene, obj, obj_index)
         
-print(f"Generate {idx} scenes")
-with open(args.output_scene_file, 'w') as f:
-    json.dump(new_scene, f)
+        if not os.path.exists(os.path.join(args.output_scenes_dir, f'scene_occlusion_{image_index:06d}.json')):
+            compute_occlusion_relationship(scene)
+            scene_with_occlusion = add_pose(scene)
+            new_scene['scenes'].append(scene_with_occlusion)
+
+            with open(os.path.join(args.output_scenes_dir, f'scene_occlusion_{image_index:06d}.json'), 'w') as ww:
+                json.dump(scene_with_occlusion, ww)
+    
+    with open(args.output_scene_file, 'w') as f:
+        json.dump(new_scene, f)
+
+
+
+# if __name__ == '__main__':
+#     import pdb
+#     import argparse
+    
+    
+#     parser = argparse.ArgumentParser()
+#     parser.add_argument('--splitted_scene', default='/home/xingrui/publish/superclevr_3D_questions/output/ver_mask_10/scenes-split', help='# function')
+#     parser.add_argument('--output_scenes_dir', default='/home/xingrui/publish/superclevr_3D_questions/output/ver_mask_10/scenes_with_occlusion', help='# function')
+#     parser.add_argument('--output_scene_file', default='/home/xingrui/publish/superclevr_3D_questions/output/ver_mask_10/superCLEVR_scenes_occlusion.json', help='# function')
+#     parser.add_argument('--original_super_clevr_scene', default='/home/xingrui/publish/superclevr_3D_questions/output/ver_mask_10/superCLEVR_scenes.json', help='# function')
+#     args = parser.parse_args()
+
+#     # new_dir = "/home/xingrui/publish/superclevr_3D_questions/output/ver_mask_new/scenes-split"
+#     # new_dir_occlusion = "/home/xingrui/publish/superclevr_3D_questions/output/ver_mask_new/scenes_with_occlusion"
+#     # output_scene_file = "/home/xingrui/publish/superclevr_3D_questions/output/ver_mask_new/superCLEVR_scenes_210k_occlusion_stricker_0412.json"
+
+#     # original_super_clevr_scene = "/home/xingrui/publish/superclevr_3D_questions/output/ver_mask_new/superCLEVR_scenes_210k.json"
+#     # original_super_clevr_scene = "/home/xingrui/vqa/super-clevr-gen/output/ver_mask_new/superCLEVR_scenes_occlusion.json"
+
+#     if not os.path.exists(args.output_scenes_dir):
+#         os.makedirs(args.output_scenes_dir, exist_ok=True)
+#     with open(args.original_super_clevr_scene, 'r') as f:
+#         new_scene = json.load(f)
+    
+#     ori_scenes = copy.deepcopy(new_scene['scenes'][:])
+    
+#     new_scene['scenes'] = []
+
+#     # find_new = False
+#     ori_idx = ''
+#     scene = {}
+
+#     # idx = 19999-1
+#     idx = 29999
+
+#     read_scene_dict = {}
+
+#     for scene_file in tqdm(sorted(os.listdir(args.splitted_scene))):
+#         with open(os.path.join(args.splitted_scene, scene_file)) as f:
+#             obj = json.load(f)
+#         read_scene_dict[scene_file] = obj
+
+#     sorted_list = sorted(os.listdir(args.splitted_scene))
+
+#     for i, scene_file in enumerate(tqdm(sorted_list)):
+#         logging.info(scene_file + '\t' + str(idx) +'\t' + str(i))
+#         if len(scene_file.split("_")) < 4:
+#             continue
+
+#         obj = read_scene_dict[scene_file]
+        
+#         ori_scene_name = "_".join(scene_file.split("_")[:-1])
+        
+#         if ori_idx != ori_scene_name:
+
+#             if ori_idx != '':
+#                 if not os.path.exists(os.path.join(args.output_scenes_dir, f'scene_occlusion_{idx:06d}.json')):
+#                     compute_occlusion_relationship(scene)
+#                     scene_with_occlusion = add_pose(scene)
+#                     new_scene['scenes'].append(scene_with_occlusion)
+
+#                     with open(os.path.join(args.output_scenes_dir, f'scene_occlusion_{idx:06d}.json'), 'w') as ww:
+#                         json.dump(scene_with_occlusion, ww)
+#             idx += 1     
+#             if idx % 200 == 0:
+#                 print(f"To index {idx}")
+
+#             # if idx >= len(ori_scenes):
+#             if idx >= 30000:
+#             # if idx >= len(ori_scenes) or idx > 2:
+#                 break
+#             scene = ori_scenes[idx]
+#             scene['occlusion'] = {}
+
+#             ori_idx = ori_scene_name
+#         #     find_new = True
+#         # else:
+#         #     find_new = False
+
+        
+#         image_index = obj['image_index']
+#         img_index, obj_index = image_index.split("_")
+
+#         if not os.path.exists(os.path.join(args.output_scenes_dir, f'scene_occlusion_{idx:06d}.json')):
+#             scene['occlusion'][obj_index] = compute_occlusion(scene, obj, obj_index)
+
+#     # save the last one
+#     import ipdb
+#     ipdb.set_trace()
+#     compute_occlusion_relationship(scene)
+#     scene_with_occlusion = add_pose(scene)
+#     new_scene['scenes'].append(scene_with_occlusion)
+
+#     with open(os.path.join(args.output_scenes_dir, f'scene_occlusion_{idx:06d}.json'), 'w') as ww:
+#         json.dump(scene_with_occlusion, ww)
+
+
+#     # Dump the whole scene file
+#     print(f"Generate {idx} scenes")
+#     with open(args.output_scene_file, 'w') as f:
+#         json.dump(new_scene, f)
 
 
 

@@ -49,9 +49,15 @@ cd image_generation
 #     --load_scene 1 \
 #     --clevr_scene_path /home/xingrui/publish/3D-Aware-VQA/superclevr-3D-question/output/ver_mask_30k_copy/superCLEVR_scenes_split_last_9000.json
 
-# 4.
+# # 4.
+# python add_occlusion_mask/add_occlusion.py \
+#     --splitted_scene /home/xingrui/publish/3D-Aware-VQA/superclevr-3D-question/output/ver_mask_30k_copy/scenes-split \
+#     --output_scenes_dir /home/xingrui/publish/3D-Aware-VQA/superclevr-3D-question/output/ver_mask_30k_copy/scenes_with_occlusion \
+#     --output_scene_file /home/xingrui/publish/3D-Aware-VQA/superclevr-3D-question/output/ver_mask_30k_copy/superCLEVR_scenes_occlusion_9000.json \
+#     --original_super_clevr_scene /home/xingrui/publish/3D-Aware-VQA/superclevr-3D-question/output/ver_mask_30k_copy/last_9000.json
+
 python add_occlusion_mask/add_occlusion.py \
-    --splitted_scene /home/xingrui/publish/3D-Aware-VQA/superclevr-3D-question/output/ver_mask_30k_copy/scenes-split \
-    --scenes_with_occlusion /home/xingrui/publish/3D-Aware-VQA/superclevr-3D-question/output/ver_mask_30k_copy/scenes_with_occlusion \
-    --output_scene_file /home/xingrui/publish/3D-Aware-VQA/superclevr-3D-question/output/ver_mask_30k_copy/superCLEVR_scenes_occlusion_9000.json \
-    --original_super_clevr_scene /home/xingrui/publish/3D-Aware-VQA/superclevr-3D-question/output/ver_mask_30k_copy/last_9000.json
+    --splitted_scene /home/xingrui/publish/3D-Aware-VQA/superclevr-3D-question/output/ver_mask_30k/scenes-split-tmp \
+    --output_scenes_dir /home/xingrui/publish/3D-Aware-VQA/superclevr-3D-question/output/ver_mask_30k/scenes_with_occlusion-tmp \
+    --output_scene_file /home/xingrui/publish/3D-Aware-VQA/superclevr-3D-question/output/ver_mask_30k/superCLEVR_scenes_occlusion_tmp.json \
+    --original_super_clevr_scene /home/xingrui/publish/3D-Aware-VQA/superclevr-3D-question/output/ver_mask_30k/last_9000.json
