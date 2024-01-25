@@ -1,10 +1,11 @@
 # Super-CLEVR-3D Dataset
+Footnote: This dataset is published as part of the NeurIPS'23 paper ["3D-Aware Visual Question Answering about Parts, Poses and Occlusions"](https://arxiv.org/abs/2310.17914). Please refer to the paper for a more detailed explanation and motivations of this dataset. The whole project of this paper can be found at [3D-Aware-VQA](https://github.com/XingruiWang/3D-Aware-VQA). 
 
-The implementation of Super-CLEVR-3D dataset. This dataset is published in NeurIPS 2023 paper [3D-Aware Visual Question Answering about Parts, Poses and Occlusions](https://arxiv.org/abs/2310.17914). The implementaion of model is in [3D-Aware-VQA](https://github.com/XingruiWang/3D-Aware-VQA). 
+## About
+**Super-CLEVR-3D** is a visual question answering (VQA) dataset where the questions are about the explicit 3D configuration of the objects from images (i.e. **3D poses**, **parts**, and **occlusion**). It consists of objects from 5 categories: aeroplanes, buses, bicycles, cars and motorbikes. The rendered objects are from [CGParts](https://github.com/qliu24/render-3d-segmentation) dataset, with the same setting as [Super-CLEVR](https://arxiv.org/abs/2212.00259) dataset. 
 
-<span style="color:blue">The code is still updating, and the dataset download link is coming soon.</span>.
 
-# How to Download
+## How to Download
 
 | Name   | Download Link | Description                                                        |                                            
 |--------|---------------------------|--------------------------------------------------------------------|
@@ -12,19 +13,19 @@ The implementation of Super-CLEVR-3D dataset. This dataset is published in NeurI
 | Annotations |  [scenes.json](https://www.cs.jhu.edu/~xwang378/share/Super-CLEVR-3D/scenes.json) | The corresponding annotation for each objects.|
 | Questions | [questions.zip](https://www.cs.jhu.edu/~xwang378/share/Super-CLEVR-3D/questions.zip) |  Consist of 4 question files: `questions/superclevr_questions_obj_occlusion.json`, `questions/superclevr_questions_occlusion.json`, `questions/superclevr_questions_parts.json`, `questions/superclevr_questions_pose.json`.|
 
-# Inspect the dataset
+## Inspect the dataset
 
 This [notebook](https://colab.research.google.com/drive/13ABF3164gSZFI35LELJ0DymmfyEL-5iK?usp=sharing) shows how you can load the questions and the image after you download the data.
 
 
-# How to generate data by yourself
+## How to generate data by yourself
 
-## 1. Generate Images and Scene Annotations
+### 1. Generate Images and Scene Annotations
 
 The scripts for image generation is in `scripts/render_images_3D.sh`. Please read this [documentation](https://github.com/XingruiWang/superclevr-3D-question/blob/main/image_generation/README.md) for more instructions.
 
 
-## 2. Generate Questions
+### 2. Generate Questions
 
 As introduced in the paper, we include three types of questions: pose, parts and occlusion.
 
