@@ -12,6 +12,11 @@ The implementation of Super-CLEVR-3D dataset. This dataset is published in NeurI
 | Annotations |  [scenes.json](https://www.cs.jhu.edu/~xwang378/share/Super-CLEVR-3D/scenes.json) | The corresponding annotation for each objects.|
 | Questions | [questions.zip](https://www.cs.jhu.edu/~xwang378/share/Super-CLEVR-3D/questions.zip) |  |
 
+# Inspect the dataset
+
+This [notebook](https://colab.research.google.com/drive/13ABF3164gSZFI35LELJ0DymmfyEL-5iK?usp=sharing) shows how you can load the questions and the image after you download the data.
+
+
 # How to generate data by yourself
 
 ## 1. Generate Images and Scene Annotations
