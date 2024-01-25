@@ -9,8 +9,8 @@ The implementation of Super-CLEVR-3D dataset. This dataset is published in NeurI
 | Name   | Download Link | Description                                                        |                                            
 |--------|---------------------------|--------------------------------------------------------------------|
 | Images |  [images.zip](https://www.cs.jhu.edu/~xwang378/share/Super-CLEVR-3D/images.zip) | There are 30k images in total. The first 20k are used for training, then 5k for validation and 5k for testing. |
-| Annotations |  [scenes.json](./) | The corresponding annotation for each objects.|
-| Questions | [questions.zip](./) |  |
+| Annotations |  [scenes.json](https://www.cs.jhu.edu/~xwang378/share/Super-CLEVR-3D/scenes.json) | The corresponding annotation for each objects.|
+| Questions | [questions.zip](https://www.cs.jhu.edu/~xwang378/share/Super-CLEVR-3D/questions.zip) |  |
 
 # How to generate data by yourself
 
