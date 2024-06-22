@@ -2,7 +2,7 @@
 Footnote: This dataset is published as part of the NeurIPS'23 paper ["3D-Aware Visual Question Answering about Parts, Poses and Occlusions"](https://arxiv.org/abs/2310.17914). Please refer to the paper for a more detailed explanation and motivations of this dataset. The whole project of this paper can be found at [3D-Aware-VQA](https://github.com/XingruiWang/3D-Aware-VQA). 
 
 ## About
-**Super-CLEVR-3D** is a visual question answering (VQA) dataset where the questions are about the explicit 3D configuration of the objects from images (i.e. **3D poses**, **parts**, and **occlusion**). It consists of objects from 5 categories: aeroplanes, buses, bicycles, cars and motorbikes. The rendered objects are from [CGParts](https://github.com/qliu24/render-3d-segmentation) dataset, with the same setting as [Super-CLEVR](https://arxiv.org/abs/2212.00259) dataset. 
+**Super-CLEVR-3D** is a visual question answering (VQA) dataset where the questions are about the explicit 3D configuration of the objects from images (i.e. **3D poses**, **parts**, and **occlusion**). It consists of objects from 5 categories: aeroplanes, buses, bicycles, cars and motorbikes. The rendered objects are from [CGParts](https://github.com/qliu24/render-3d-segmentation) dataset, with the same setting as [Super-CLEVR](https://github.com/Lizw14/Super-CLEVR) dataset. 
 
 
 ## How to Download
